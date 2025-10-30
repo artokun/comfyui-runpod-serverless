@@ -71,14 +71,15 @@ RUN pip3 install --no-cache-dir \
     torchvision==${TORCHVISION_VERSION}+${CUDA_TAG} \
     torchaudio==${TORCHAUDIO_VERSION}+${CUDA_TAG}
 
-# Install additional dependencies
+# Fetch and install ComfyUI's requirements.txt from GitHub
+RUN wget -O /tmp/comfyui-requirements.txt \
+    https://raw.githubusercontent.com/comfyanonymous/ComfyUI/master/requirements.txt && \
+    pip3 install --no-cache-dir -r /tmp/comfyui-requirements.txt && \
+    rm /tmp/comfyui-requirements.txt
+
+# Install additional dependencies (xformers, performance optimizations)
 RUN pip3 install --no-cache-dir \
     xformers==0.0.28.post1 \
-    numpy==2.0.0 \
-    opencv-python-headless==4.10.0.84 \
-    pillow>=10.3.0 \
-    einops \
-    safetensors \
     transformers \
     accelerate
 

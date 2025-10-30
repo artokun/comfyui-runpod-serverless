@@ -50,6 +50,13 @@ except ImportError:
     HF_HUB_AVAILABLE = False
     hf_hub_download = None
 
+try:
+    import requests
+    REQUESTS_AVAILABLE = True
+except ImportError:
+    REQUESTS_AVAILABLE = False
+    requests = None
+
 
 # Valid model destination directories in ComfyUI
 VALID_DESTINATIONS = {
@@ -91,6 +98,125 @@ def parse_huggingface_url(url: str) -> Optional[Tuple[str, str, str]]:
         return repo_id, revision, filename
 
     return None
+
+
+def parallel_download(url: str, output_file: Path, num_threads: int = 8, verbose: bool = False) -> bool:
+    """
+    Download file using parallel chunk downloads with byte-range requests.
+
+    Args:
+        url: URL to download from
+        output_file: Path to save file to
+        num_threads: Number of parallel download threads (default: 8)
+        verbose: Show detailed progress
+
+    Returns:
+        True if successful, False otherwise
+    """
+    if not REQUESTS_AVAILABLE:
+        return False
+
+    try:
+        # Get file size with HEAD request
+        response = requests.head(url, allow_redirects=True, timeout=10)
+
+        # Check if server supports range requests
+        if 'Accept-Ranges' not in response.headers or response.headers['Accept-Ranges'] == 'none':
+            if verbose:
+                print(f"  Server doesn't support range requests, falling back to single-threaded")
+            return False
+
+        file_size = int(response.headers.get('Content-Length', 0))
+        if file_size == 0:
+            if verbose:
+                print(f"  Could not determine file size, falling back to single-threaded")
+            return False
+
+        if verbose:
+            print(f"  File size: {file_size / 1024 / 1024:.1f} MB")
+            print(f"  Using {num_threads} parallel connections")
+
+        # Calculate chunk size
+        chunk_size = file_size // num_threads
+
+        # Create temporary directory for chunks
+        temp_dir = output_file.parent / f".{output_file.name}.chunks"
+        temp_dir.mkdir(exist_ok=True)
+
+        def download_chunk(chunk_id: int, start_byte: int, end_byte: int) -> bool:
+            """Download a single chunk"""
+            chunk_file = temp_dir / f"chunk_{chunk_id}"
+            headers = {'Range': f'bytes={start_byte}-{end_byte}'}
+
+            try:
+                response = requests.get(url, headers=headers, stream=True, timeout=30)
+                response.raise_for_status()
+
+                with open(chunk_file, 'wb') as f:
+                    for data in response.iter_content(chunk_size=8192):
+                        f.write(data)
+
+                return True
+            except Exception as e:
+                if verbose:
+                    print(f"  Chunk {chunk_id} failed: {e}")
+                return False
+
+        # Download chunks in parallel
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+
+        with ThreadPoolExecutor(max_workers=num_threads) as executor:
+            futures = []
+            for i in range(num_threads):
+                start_byte = i * chunk_size
+                end_byte = start_byte + chunk_size - 1 if i < num_threads - 1 else file_size - 1
+                futures.append(executor.submit(download_chunk, i, start_byte, end_byte))
+
+            # Wait for all chunks with progress
+            completed = 0
+            if TQDM_AVAILABLE:
+                with tqdm(total=num_threads, desc="  Downloading chunks", unit="chunk") as pbar:
+                    for future in as_completed(futures):
+                        if not future.result():
+                            # Cleanup and return False if any chunk fails
+                            import shutil
+                            shutil.rmtree(temp_dir, ignore_errors=True)
+                            return False
+                        completed += 1
+                        pbar.update(1)
+            else:
+                for future in as_completed(futures):
+                    if not future.result():
+                        import shutil
+                        shutil.rmtree(temp_dir, ignore_errors=True)
+                        return False
+                    completed += 1
+                    if verbose and completed % 2 == 0:
+                        print(f"  Downloaded {completed}/{num_threads} chunks")
+
+        # Combine chunks into final file
+        if verbose:
+            print(f"  Combining chunks...")
+
+        with open(output_file, 'wb') as outfile:
+            for i in range(num_threads):
+                chunk_file = temp_dir / f"chunk_{i}"
+                with open(chunk_file, 'rb') as infile:
+                    outfile.write(infile.read())
+
+        # Cleanup temp directory
+        import shutil
+        shutil.rmtree(temp_dir, ignore_errors=True)
+
+        if verbose:
+            print(f"  Parallel download complete!")
+
+        return True
+
+    except Exception as e:
+        if verbose:
+            print(f"  Parallel download failed: {e}")
+        return False
 
 
 @dataclass
@@ -265,8 +391,25 @@ class ModelDownloader:
                         raise FileNotFoundError(f"Downloaded file not found: {downloaded_path}")
 
                 except Exception as hf_error:
-                    # Fall back to urllib if HF download fails
-                    print(f"  HF download failed ({hf_error}), falling back to urllib...")
+                    # Fall back to parallel download if HF download fails
+                    print(f"  HF download failed ({hf_error}), trying parallel download...")
+
+            # Try parallel chunk download (fast for servers supporting range requests)
+            if REQUESTS_AVAILABLE:
+                print(f"  Attempting parallel chunk download...")
+                parallel_success = parallel_download(
+                    url=entry.url,
+                    output_file=output_file,
+                    num_threads=8,
+                    verbose=self.verbose
+                )
+
+                if parallel_success:
+                    self.downloaded += 1
+                    file_size = output_file.stat().st_size / 1024 / 1024
+                    return True, f"Downloaded (Parallel): {output_file.name} ({file_size:.1f} MB)"
+                else:
+                    print(f"  Parallel download not supported, falling back to single-threaded...")
 
             # Fallback: Standard urllib download (slower, single-threaded)
             if TQDM_AVAILABLE:

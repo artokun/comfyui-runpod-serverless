@@ -112,7 +112,8 @@ docker compose restart
 **Key Features:**
 - ✅ **Edit anytime** - No Docker rebuild needed
 - ✅ **Smart caching** - Only downloads new/missing models
-- ✅ **Lightning fast downloads** - hf_transfer acceleration (100-200 MB/s on gigabit)
+- ✅ **Lightning fast downloads** - hf_transfer acceleration for HuggingFace (100-200+ MB/s on gigabit)
+- ✅ **Parallel chunk downloads** - 8-thread acceleration for Civitai and other sources
 - ✅ **Lightweight default** - Fast first build (4GB vs 30GB+)
 - ✅ **Advanced example** - Complete WAN Animate setup available
 

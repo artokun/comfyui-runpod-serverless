@@ -54,6 +54,12 @@ models:
   - url: https://huggingface.co/Aitrepreneur/FLX/resolve/main/WanAnimate_relight_lora_fp16.safetensors
     destination: loras
 
+  # Civitai LoRAs (Downloaded via parallel chunk acceleration)
+  # Detail Tweaker LoRA - Enhances detail in SD 1.5 generations
+  # - url: https://civitai.com/api/download/models/62833
+  #   destination: loras
+  #   optional: true
+
   # SAM Model (Segmentation)
   - url: https://huggingface.co/Aitrepreneur/FLX/resolve/main/SeC-4B-fp16.safetensors
     destination: sams
