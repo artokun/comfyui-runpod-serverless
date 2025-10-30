@@ -11,14 +11,22 @@ Usage:
 
 import json
 import sys
+from pathlib import Path
+
+# Add parent directory to path to import handler
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
 from handler import handler
 
 def test_workflow():
     """Test the handler with an example workflow."""
 
     # Load example workflow
+    script_dir = Path(__file__).parent
+    workflow_path = script_dir / "example_workflow.json"
+
     try:
-        with open("example_workflow.json", "r") as f:
+        with open(workflow_path, "r") as f:
             workflow = json.load(f)
     except FileNotFoundError:
         print("Error: example_workflow.json not found")
@@ -47,7 +55,8 @@ def test_workflow():
                 }
             ],
             "return_images": True,
-            "timeout": 600
+            "timeout": 600,
+            "use_websocket": False  # Disable WebSocket for local testing
         }
     }
 
@@ -68,7 +77,7 @@ def test_workflow():
     print(json.dumps(result, indent=2))
 
     if result.get("status") == "success":
-        print("\n✓ Test completed successfully!")
+        print("\n[SUCCESS] Test completed successfully!")
         print(f"\nExecution time: {result.get('execution_time')}s")
         print(f"Models path: {result.get('models_path')}")
 
@@ -78,7 +87,7 @@ def test_workflow():
                 print(f"  - {img['filename']}")
                 print(f"    URL: {img['url']}")
     else:
-        print("\n✗ Test failed!")
+        print("\n[FAILED] Test failed!")
         print(f"Error: {result.get('error')}")
         sys.exit(1)
 
