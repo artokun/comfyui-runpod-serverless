@@ -44,7 +44,7 @@ Deploy ComfyUI to RunPod GPU Pods with Jupyter notebook access for development a
 4. Configure:
    ```
    Container Image: artokun/comfyui-runpod-serverless:ada
-   Container Disk: 20 GB
+   Container Disk: 50 GB
    Volume Mount: comfyui-volume → /runpod-volume
    Expose HTTP Ports: 8188, 8000
    ```

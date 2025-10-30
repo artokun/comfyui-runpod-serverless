@@ -1,5 +1,6 @@
 #!/bin/bash
-# Build script for multi-architecture Docker images
+# Build script for unified ComfyUI RunPod Docker image
+# Supports all modern NVIDIA GPUs (RTX 4090, RTX 5090, and beyond)
 
 set -e
 
@@ -18,46 +19,37 @@ show_help() {
     cat << EOF
 Usage: ./build.sh [OPTIONS]
 
-Build and optionally push ComfyUI RunPod Docker images for different GPU architectures.
+Build and optionally push the unified ComfyUI RunPod Docker image.
+Works with all modern NVIDIA GPUs (RTX 4090, RTX 5090, and beyond).
 
 Options:
-    -a, --arch ARCH       GPU architecture: "ada" (RTX 4090) or "blackwell" (RTX 5090/6000 Pro)
-                         Default: ada
     -p, --push           Push image to Docker Hub after building
-    -t, --tag TAG        Additional tag for the image (default: GPU_ARCH name)
+    -t, --tag TAG        Tag for the image (default: latest)
     -f, --file FILE      Dockerfile to use (default: Dockerfile)
     --no-cache           Build without using cache
     -h, --help           Show this help message
 
 Examples:
-    # Build for RTX 4090 (Ada)
-    ./build.sh --arch ada
+    # Build image
+    ./build.sh
 
-    # Build for RTX 6000 Pro (Blackwell) and push
-    ./build.sh --arch blackwell --push
-
-    # Build both and push
-    ./build.sh --arch ada --push && ./build.sh --arch blackwell --push
+    # Build and push
+    ./build.sh --push
 
     # Build with custom tag
-    ./build.sh --arch ada --tag latest --push
+    ./build.sh --tag v1.0.0 --push
 EOF
 }
 
 # Default values
-GPU_ARCH="ada"
 PUSH=false
-CUSTOM_TAG=""
+CUSTOM_TAG="latest"
 DOCKERFILE="Dockerfile"
 NO_CACHE=""
 
 # Parse arguments
 while [[ $# -gt 0 ]]; do
     case $1 in
-        -a|--arch)
-            GPU_ARCH="$2"
-            shift 2
-            ;;
         -p|--push)
             PUSH=true
             shift
@@ -86,26 +78,16 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-# Validate architecture
-if [[ "$GPU_ARCH" != "ada" && "$GPU_ARCH" != "blackwell" ]]; then
-    echo -e "${RED}Error: Invalid architecture '$GPU_ARCH'. Must be 'ada' or 'blackwell'.${NC}"
-    exit 1
-fi
-
 # Set image tag
-if [[ -n "$CUSTOM_TAG" ]]; then
-    IMAGE_TAG="${DOCKER_USERNAME}/${IMAGE_NAME}:${CUSTOM_TAG}"
-else
-    IMAGE_TAG="${DOCKER_USERNAME}/${IMAGE_NAME}:${GPU_ARCH}"
-fi
+IMAGE_TAG="${DOCKER_USERNAME}/${IMAGE_NAME}:${CUSTOM_TAG}"
 
 echo -e "${GREEN}==============================================================${NC}"
-echo -e "${GREEN}Building ComfyUI RunPod Worker${NC}"
+echo -e "${GREEN}Building ComfyUI RunPod Worker (Unified Image)${NC}"
 echo -e "${GREEN}==============================================================${NC}"
-echo -e "Architecture: ${YELLOW}${GPU_ARCH}${NC}"
 echo -e "Image tag:    ${YELLOW}${IMAGE_TAG}${NC}"
 echo -e "Dockerfile:   ${YELLOW}${DOCKERFILE}${NC}"
 echo -e "Push:         ${YELLOW}${PUSH}${NC}"
+echo -e "GPU Support:  ${YELLOW}All modern NVIDIA GPUs (RTX 4090+, RTX 5090+)${NC}"
 echo -e "${GREEN}==============================================================${NC}\n"
 
 # Build the image (using production target for RunPod deployment)
@@ -113,7 +95,6 @@ echo -e "${GREEN}Building Docker image...${NC}"
 docker build \
     --platform linux/amd64 \
     --target production \
-    --build-arg GPU_ARCH=${GPU_ARCH} \
     ${NO_CACHE} \
     -f ${DOCKERFILE} \
     -t ${IMAGE_TAG} \
@@ -126,13 +107,6 @@ if [ $? -eq 0 ]; then
     # Show image info
     echo -e "${GREEN}Image details:${NC}"
     docker images ${IMAGE_TAG} --format "table {{.Repository}}\t{{.Tag}}\t{{.Size}}\t{{.CreatedAt}}"
-    echo ""
-
-    # Show labels
-    echo -e "${GREEN}Build configuration:${NC}"
-    docker inspect ${IMAGE_TAG} --format='GPU Arch: {{index .Config.Labels "gpu_arch"}}'
-    docker inspect ${IMAGE_TAG} --format='CUDA Version: {{index .Config.Labels "cuda_version"}}'
-    docker inspect ${IMAGE_TAG} --format='PyTorch Version: {{index .Config.Labels "pytorch_version"}}'
     echo ""
 
     # Push if requested
@@ -159,10 +133,10 @@ if [ $? -eq 0 ]; then
     if [ "$PUSH" = true ]; then
         echo -e "1. Go to RunPod console"
         echo -e "2. Create/update endpoint with image: ${YELLOW}${IMAGE_TAG}${NC}"
-        echo -e "3. Select ${YELLOW}${GPU_ARCH}${NC} compatible GPUs"
+        echo -e "3. Compatible with all modern NVIDIA GPUs"
     else
         echo -e "1. Test locally: ${YELLOW}docker run --gpus all -p 8000:8000 ${IMAGE_TAG}${NC}"
-        echo -e "2. Push to Docker Hub: ${YELLOW}./build.sh --arch ${GPU_ARCH} --push${NC}"
+        echo -e "2. Push to Docker Hub: ${YELLOW}./build.sh --push${NC}"
     fi
 
     echo -e "${GREEN}==============================================================${NC}\n"

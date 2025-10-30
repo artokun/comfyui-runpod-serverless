@@ -23,12 +23,11 @@ python download_models.py --dry-run  # Preview what will download
 python install_nodes.py              # Install nodes from config.yml
 python install_nodes.py --dry-run    # Preview what will install
 
-# Deploy to RunPod
-./deploy.sh ada                      # RTX 4090
-./deploy.sh blackwell                # RTX 5090/6000 Pro
+# Deploy to RunPod (works with all modern GPUs)
+./deploy.sh                          # Build and push unified image
 
 # Advanced
-./build.sh --arch ada --push         # Build and push manually
+./build.sh --push                    # Build and push manually
 ```
 
 Access locally: http://localhost:8188 (ComfyUI UI), http://localhost:8000 (API)
@@ -45,9 +44,7 @@ Access locally: http://localhost:8188 (ComfyUI UI), http://localhost:8000 (API)
 3. POSTs to `/prompt`, polls `/history/{id}` via WebSocket or HTTP until done
 4. Extracts images, optionally uploads to S3, returns URLs
 
-**GPU variants**:
-- `ada`: CUDA 11.8, PyTorch 2.1.0 (RTX 4090, default)
-- `blackwell`: CUDA 12.4, PyTorch 2.5.0 (RTX 5090/6000 Pro)
+**Universal GPU support**: Single unified image with PyTorch 2.9.0 + CUDA 12.8 supports all modern NVIDIA GPUs (RTX 4090, RTX 5090, and beyond)
 
 **Performance optimizations**: Includes SageAttention v2.2.0, Triton, hf_transfer for 3-5x faster HuggingFace downloads (100-200 MB/s on gigabit connections).
 
