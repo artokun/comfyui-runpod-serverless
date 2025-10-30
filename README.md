@@ -32,26 +32,34 @@ Press `Ctrl+C` to stop.
 
 ## Deploy to RunPod
 
-### Using Official Images (Recommended)
+**Choose Your Deployment Type:**
 
-Use the pre-built images that auto-deploy on every release:
+### 🚀 Serverless Endpoints (Production)
+Auto-scaling API deployment with scale-to-zero cost savings:
+- **[RunPod Serverless Quickstart →](RUNPOD_QUICKSTART.md)**
+- Container Image: `artokun/comfyui-runpod-serverless:ada`
+- Pay per execution, auto-scaling
+- Perfect for production APIs
 
-**RunPod Endpoint Configuration:**
-- **RTX 4090:** `alongbottom/comfyui-runpod:ada`
-- **RTX 5090/6000 Pro:** `alongbottom/comfyui-runpod:blackwell`
+### 🔧 GPU Pods (Development)
+Interactive development with Jupyter and SSH access:
+- **[RunPod Pods Guide →](RUNPOD_PODS.md)**
+- Container Image: `artokun/comfyui-runpod-serverless:ada`
+- Pay per hour, full control
+- Perfect for testing and workflow design
 
-These images are automatically built and deployed via GitHub Actions on every merge to `main`.
+**GPU Options:**
+- `ada` tag - RTX 4090 (CUDA 11.8, PyTorch 2.1.0)
+- `blackwell` tag - RTX 5090/6000 Pro (CUDA 12.4, PyTorch 2.5.0)
 
-### Manual Deploy (Maintainers Only)
+Images auto-deploy via GitHub Actions on every release.
 
-If you need to build and deploy manually:
+### Manual Deploy (Contributors)
 
 ```bash
-./deploy.sh ada          # RTX 4090
-./deploy.sh blackwell    # RTX 5090/6000 Pro
+./deploy.sh ada          # Build and push RTX 4090 image
+./deploy.sh blackwell    # Build and push RTX 5090 image
 ```
-
-Same workflows, same API format, just runs on RunPod's GPUs!
 
 ## Configuration
 
@@ -78,29 +86,48 @@ Uncomment and set `MODELS_PATH` in `.env` to mount your existing models.
 - Update anytime: `cd ComfyUI && git pull`
 - Or enable auto-updates with `AUTO_UPDATE=true`
 
-**Configuration:**
-Edit `config.yml` to specify models and custom nodes to install automatically:
-```yaml
-models:
-  - url: https://huggingface.co/stabilityai/sdxl-vae/resolve/main/sdxl_vae.safetensors
-    destination: vae
+**Models & Custom Nodes (No Rebuild Needed!):**
 
+The default `config.yml` includes **SD 1.5 + ComfyUI Manager** for fast setup (~4GB model).
+
+For advanced setups (WAN Animate 2.2, SDXL, etc.), copy `config.example.yml`:
+
+```bash
+# Option 1: Use advanced example (WAN Animate 2.2 - 11 models, 20+ nodes)
+cp config.example.yml config.yml
+docker compose restart
+
+# Option 2: Edit default config manually
+nano config.yml
+docker compose restart
+
+# Option 3: Mix and match from example
+# Pick specific models/nodes from config.example.yml
+```
+
+**Configuration Files:**
+- `config.yml` - Active config (lightweight SD 1.5 default)
+- `config.example.yml` - Advanced reference (complete WAN Animate 2.2 setup)
+
+**Key Features:**
+- ✅ **Edit anytime** - No Docker rebuild needed
+- ✅ **Smart caching** - Only downloads new/missing models
+- ✅ **Lightweight default** - Fast first build (4GB vs 30GB+)
+- ✅ **Advanced example** - Complete WAN Animate setup available
+
+**Cloud Deployment (RunPod/AWS/GCP):**
+Override config via environment variable without rebuilding:
+```bash
+# In RunPod template environment variables:
+CONFIG_YML=models:
+  - url: https://huggingface.co/.../model.safetensors
+    destination: checkpoints
 nodes:
-  - url: https://github.com/ltdrdata/ComfyUI-Manager.git
+  - url: https://github.com/.../node.git
     version: latest
 ```
-Models and nodes download/install automatically on container start if configured.
 
-**Custom Nodes:**
-Add custom nodes to `config.yml`:
-```yaml
-nodes:
-  - url: https://github.com/ltdrdata/ComfyUI-Manager.git
-    version: latest
-  - url: https://github.com/kijai/ComfyUI-KJNodes.git
-    version: v1.0.5
-```
-Nodes install automatically on container start with full version control.
+This writes the config on startup - perfect for cloud deployments!
 
 ## Directory Structure
 

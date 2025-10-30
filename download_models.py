@@ -35,6 +35,13 @@ except ImportError:
     print("Error: PyYAML not installed. Install with: pip install pyyaml")
     sys.exit(1)
 
+try:
+    from tqdm import tqdm
+    TQDM_AVAILABLE = True
+except ImportError:
+    TQDM_AVAILABLE = False
+    tqdm = None
+
 
 # Valid model destination directories in ComfyUI
 VALID_DESTINATIONS = {
@@ -190,19 +197,39 @@ class ModelDownloader:
                 print(f"  To: {output_file}")
 
             # Download with progress
-            def progress_hook(block_num, block_size, total_size):
-                if total_size > 0 and self.verbose:
-                    downloaded = block_num * block_size
-                    percent = min(100, (downloaded * 100) / total_size)
-                    print(f"\r  Progress: {percent:.1f}%", end='', flush=True)
+            if TQDM_AVAILABLE:
+                # Use tqdm for progress bar
+                with tqdm(
+                    unit='B',
+                    unit_scale=True,
+                    unit_divisor=1024,
+                    miniters=1,
+                    desc=f"  {output_file.name[:40]}",
+                    disable=False
+                ) as progress_bar:
+                    def progress_hook(block_num, block_size, total_size):
+                        if total_size > 0:
+                            if progress_bar.total != total_size:
+                                progress_bar.total = total_size
+                            downloaded = block_num * block_size
+                            progress_bar.update(block_size if block_num > 0 else 0)
 
-            urllib.request.urlretrieve(entry.url, output_file, reporthook=progress_hook)
+                    urllib.request.urlretrieve(entry.url, output_file, reporthook=progress_hook)
+            else:
+                # Fallback to simple percentage display
+                def progress_hook(block_num, block_size, total_size):
+                    if total_size > 0:
+                        downloaded = block_num * block_size
+                        percent = min(100, (downloaded * 100) / total_size)
+                        if block_num % 50 == 0:  # Print every 50 blocks to reduce spam
+                            print(f"  {output_file.name[:40]}: {percent:.1f}%")
 
-            if self.verbose:
-                print()  # New line after progress
+                urllib.request.urlretrieve(entry.url, output_file, reporthook=progress_hook)
+                print(f"  {output_file.name}: 100%")
 
             self.downloaded += 1
-            return True, f"Downloaded: {output_file.name} ({output_file.stat().st_size / 1024 / 1024:.1f} MB)"
+            file_size_mb = output_file.stat().st_size / 1024 / 1024
+            return True, f"Downloaded: {output_file.name} ({file_size_mb:.1f} MB)"
 
         except Exception as e:
             self.failed += 1

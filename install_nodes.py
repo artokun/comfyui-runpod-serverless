@@ -21,6 +21,7 @@ import os
 import re
 import subprocess
 import sys
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import List, Tuple, Optional, Dict
 from dataclasses import dataclass
@@ -400,30 +401,41 @@ class NodeInstaller:
         except Exception as e:
             return False, str(e)
 
-    def install_all(self, entries: List[NodeEntry]) -> Dict[str, int]:
-        """Install all node entries"""
+    def install_all(self, entries: List[NodeEntry], max_workers: int = 4) -> Dict[str, int]:
+        """Install all node entries in parallel"""
         if not entries:
             return {"installed": 0, "skipped": 0, "failed": 0}
 
         print(f"\n{'='*70}")
-        print(f"  Installing {len(entries)} custom node(s)")
+        print(f"  Installing {len(entries)} custom node(s) ({max_workers} parallel workers)")
         print(f"  Target: {self.custom_nodes_dir}")
         print(f"{'='*70}\n")
 
         # Ensure custom_nodes directory exists
         self.custom_nodes_dir.mkdir(parents=True, exist_ok=True)
 
-        for entry in entries:
-            success, message = self.install_entry(entry)
-            print(f"  {message}")
+        # Process entries in parallel
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            # Submit all tasks
+            future_to_entry = {executor.submit(self.install_entry, entry): entry for entry in entries}
 
-            if success:
-                if "already" in message or "skipped" in message:
-                    self.skipped += 1
-                else:
-                    self.installed += 1
-            else:
-                self.failed += 1
+            # Collect results as they complete
+            for future in as_completed(future_to_entry):
+                entry = future_to_entry[future]
+                try:
+                    success, message = future.result()
+                    print(f"  {message}")
+
+                    if success:
+                        if "already" in message or "skipped" in message:
+                            self.skipped += 1
+                        else:
+                            self.installed += 1
+                    else:
+                        self.failed += 1
+                except Exception as e:
+                    print(f"  ✗ {entry.repo_name} (exception: {e})")
+                    self.failed += 1
 
         print(f"\n{'='*70}")
         print(f"  Summary: {self.installed} installed, {self.skipped} skipped, {self.failed} failed")
@@ -478,6 +490,12 @@ def main():
         "--verbose",
         action="store_true",
         help="Show detailed output"
+    )
+    parser.add_argument(
+        "--max-workers",
+        type=int,
+        default=4,
+        help="Number of parallel workers for installation (default: 4)"
     )
 
     args = parser.parse_args()
@@ -565,7 +583,7 @@ def main():
         skip_deps=args.skip_deps,
         verbose=args.verbose
     )
-    results = installer.install_all(entries)
+    results = installer.install_all(entries, max_workers=args.max_workers)
 
     return 1 if results["failed"] > 0 else 0
 

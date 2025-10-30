@@ -1,11 +1,26 @@
-# RunPod Deployment Quickstart
+# RunPod Serverless Endpoint Quickstart
 
-Quick guide to deploy ComfyUI Handler to RunPod serverless.
+Deploy ComfyUI as a serverless API endpoint with auto-scaling and scale-to-zero cost savings.
+
+## Pods vs Serverless Endpoints
+
+**Choose Serverless Endpoints if:**
+- ✅ Production API deployment
+- ✅ Auto-scaling needed
+- ✅ Pay per execution (scale to zero)
+- ✅ No server management
+
+**Choose GPU Pods if:**
+- 🔧 Development and testing
+- 🔧 Interactive ComfyUI design
+- 🔧 Need SSH/Jupyter access
+- 🔧 See [RUNPOD_PODS.md](RUNPOD_PODS.md) instead
 
 ## Prerequisites
 
 1. **RunPod Account** - Sign up at https://runpod.io
 2. **Payment Method** - Add to your RunPod account
+3. **Network Volume** - For persistent models/nodes (recommended)
 
 That's it! No Docker Hub account or manual builds needed.
 
@@ -133,19 +148,41 @@ AUTO_UPDATE=true
 
 ⚠️ Adds 10-30s to startup time
 
-### Custom Models/Nodes
+### Custom Models/Nodes (No Rebuild Needed!)
 
-Edit `config.yml` in your repo, then redeploy:
+**Recommended Method: Environment Variable**
 
-```yaml
-models:
-  - url: https://huggingface.co/.../model.safetensors
-    destination: checkpoints
+Paste your `config.yml` content as `CONFIG_YML` environment variable in template settings. On startup, this writes to `/runpod-volume/config.yml` (persistent):
 
-nodes:
-  - url: https://github.com/user/ComfyUI-Plugin.git
-    version: latest
+1. Go to your template settings
+2. Add environment variable:
+   ```
+   CONFIG_YML=models:
+     - url: https://huggingface.co/stabilityai/sdxl-vae/resolve/main/sdxl_vae.safetensors
+       destination: vae
+   nodes:
+     - url: https://github.com/ltdrdata/ComfyUI-Manager.git
+       version: latest
+   ```
+3. Save template
+4. Workers will use this config on startup
+5. **Bonus:** File persists on volume, survives restarts!
+
+**Alternative: Direct Volume Edit**
+
+If you have SSH access to network volume:
+```bash
+cd /runpod-volume
+nano config.yml
+# Edit and save
 ```
+
+Next worker startup will use the edited config.
+
+**Configuration Priority:**
+1. 🥇 CONFIG_YML env var → Writes to volume (persistent)
+2. 🥈 config.yml on volume → Can be edited directly
+3. 🥉 Baked-in default → Fallback if nothing else
 
 See [Model Management](docs/MODEL_MANAGEMENT.md) and [Custom Nodes](docs/CUSTOM_NODES.md) guides.
 

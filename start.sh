@@ -82,19 +82,64 @@ echo "  Models Path: ${MODELS_PATH}"
 echo "  Environment: ${ENVIRONMENT}"
 echo ""
 
-# Install custom nodes from config.yml
-if [ -f "/app/config.yml" ] || [ -f "$COMFYUI_PATH/../config.yml" ]; then
-    echo "Checking for custom nodes to install..."
+# Configuration hierarchy:
+# 1. CONFIG_YML env var → writes to volume (persistent, editable)
+# 2. config.yml on volume (source of truth)
+# 3. /app/config.yml (baked-in fallback)
 
-    # Determine config file location
-    CONFIG_FILE=""
-    if [ -f "/app/config.yml" ]; then
-        CONFIG_FILE="/app/config.yml"
-    elif [ -f "$COMFYUI_PATH/../config.yml" ]; then
-        CONFIG_FILE="$COMFYUI_PATH/../config.yml"
+# Handle CONFIG_YML environment variable (for RunPod/cloud deployments)
+if [ -n "$CONFIG_YML" ]; then
+    echo "=================================================="
+    echo "  CONFIG_YML Environment Variable Detected"
+    echo "=================================================="
+
+    # Determine volume config path
+    if [ -d "/runpod-volume" ]; then
+        VOLUME_CONFIG="/runpod-volume/config.yml"
+    else
+        VOLUME_CONFIG="$COMFYUI_PATH/../config.yml"
     fi
 
-    if [ -n "$CONFIG_FILE" ] && [ -f "/app/install_nodes.py" ]; then
+    echo "Writing config to: $VOLUME_CONFIG"
+
+    # Create parent directory if needed
+    mkdir -p "$(dirname "$VOLUME_CONFIG")"
+
+    # Write environment variable content to persistent volume
+    echo "$CONFIG_YML" > "$VOLUME_CONFIG"
+
+    if [ $? -eq 0 ]; then
+        echo "✓ Config written to persistent volume"
+        echo ""
+        echo "This file will persist across restarts and can be edited:"
+        echo "  - Pods: Upload via Jupyter or edit directly"
+        echo "  - Endpoints: Update CONFIG_YML env var to regenerate"
+        echo ""
+    else
+        echo "✗ Failed to write config (using default)"
+    fi
+    echo "=================================================="
+    echo ""
+fi
+
+# Install custom nodes from config.yml
+# Priority: volume config → baked-in config
+echo "Checking for custom nodes to install..."
+
+# Determine config file location (priority order)
+CONFIG_FILE=""
+if [ -f "/runpod-volume/config.yml" ]; then
+    CONFIG_FILE="/runpod-volume/config.yml"
+    echo "Using config from: /runpod-volume/config.yml (persistent volume)"
+elif [ -f "$COMFYUI_PATH/../config.yml" ]; then
+    CONFIG_FILE="$COMFYUI_PATH/../config.yml"
+    echo "Using config from: $COMFYUI_PATH/../config.yml (mounted volume)"
+elif [ -f "/app/config.yml" ]; then
+    CONFIG_FILE="/app/config.yml"
+    echo "Using config from: /app/config.yml (baked-in default)"
+fi
+
+if [ -n "$CONFIG_FILE" ] && [ -f "/app/install_nodes.py" ]; then
         # Count active node entries
         ACTIVE_NODES=$(grep -A 2 "^  - url:" "$CONFIG_FILE" | grep -v "^#" | grep "url:" | wc -l || echo "0")
 
@@ -103,9 +148,11 @@ if [ -f "/app/config.yml" ] || [ -f "$COMFYUI_PATH/../config.yml" ]; then
 
             python3 /app/install_nodes.py \
                 --config "$CONFIG_FILE" \
-                --comfyui-dir "$COMFYUI_PATH"
+                --comfyui-dir "$COMFYUI_PATH" \
+                --max-workers 4 \
+                || INSTALL_EXIT_CODE=$?
 
-            if [ $? -eq 0 ]; then
+            if [ "${INSTALL_EXIT_CODE:-0}" -eq 0 ]; then
                 echo "✓ Custom nodes installation complete"
             else
                 echo "⚠ Some custom nodes failed to install (check logs above)"
@@ -117,21 +164,28 @@ if [ -f "/app/config.yml" ] || [ -f "$COMFYUI_PATH/../config.yml" ]; then
         echo "⚠ config.yml or install_nodes.py not found, skipping custom node installation"
     fi
     echo ""
+else
+    echo "No config.yml found, skipping custom node installation"
+    echo ""
 fi
 
 # Download models from config.yml
-if [ -f "/app/config.yml" ] || [ -f "$COMFYUI_PATH/../config.yml" ]; then
-    echo "Checking for models to download..."
+echo "Checking for models to download..."
 
-    # Determine config file location
-    CONFIG_FILE=""
-    if [ -f "/app/config.yml" ]; then
-        CONFIG_FILE="/app/config.yml"
-    elif [ -f "$COMFYUI_PATH/../config.yml" ]; then
-        CONFIG_FILE="$COMFYUI_PATH/../config.yml"
-    fi
+# Determine config file location (priority order - same as nodes)
+CONFIG_FILE=""
+if [ -f "/runpod-volume/config.yml" ]; then
+    CONFIG_FILE="/runpod-volume/config.yml"
+    echo "Using config from: /runpod-volume/config.yml (persistent volume)"
+elif [ -f "$COMFYUI_PATH/../config.yml" ]; then
+    CONFIG_FILE="$COMFYUI_PATH/../config.yml"
+    echo "Using config from: $COMFYUI_PATH/../config.yml (mounted volume)"
+elif [ -f "/app/config.yml" ]; then
+    CONFIG_FILE="/app/config.yml"
+    echo "Using config from: /app/config.yml (baked-in default)"
+fi
 
-    if [ -n "$CONFIG_FILE" ] && [ -f "/app/download_models.py" ]; then
+if [ -n "$CONFIG_FILE" ] && [ -f "/app/download_models.py" ]; then
         # Count active model entries
         ACTIVE_MODELS=$(grep -A 2 "^  - url:" "$CONFIG_FILE" | grep -v "^#" | grep "url:" | wc -l || echo "0")
 
@@ -140,9 +194,11 @@ if [ -f "/app/config.yml" ] || [ -f "$COMFYUI_PATH/../config.yml" ]; then
 
             python3 /app/download_models.py \
                 --config "$CONFIG_FILE" \
-                --base-dir "$COMFYUI_PATH/models"
+                --base-dir "$COMFYUI_PATH/models" \
+                --parallel 3 \
+                || DOWNLOAD_EXIT_CODE=$?
 
-            if [ $? -eq 0 ]; then
+            if [ "${DOWNLOAD_EXIT_CODE:-0}" -eq 0 ]; then
                 echo "✓ Model downloads complete"
             else
                 echo "⚠ Some model downloads failed (check logs above)"
@@ -151,8 +207,11 @@ if [ -f "/app/config.yml" ] || [ -f "$COMFYUI_PATH/../config.yml" ]; then
             echo "No models configured for download (all commented out)"
         fi
     else
-        echo "⚠ config.yml or download_models.py not found, skipping model downloads"
+        echo "⚠ download_models.py not found, skipping model downloads"
     fi
+    echo ""
+else
+    echo "No config.yml found, skipping model downloads"
     echo ""
 fi
 

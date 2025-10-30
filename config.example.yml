@@ -1,0 +1,141 @@
+# ComfyUI Advanced Configuration Example
+# This file contains a complete WAN Animate 2.2 setup with all models and nodes
+#
+# USAGE:
+#   1. For basic setup: Use config.yml (SD 1.5 only, fast)
+#   2. For WAN Animate: Copy this file → config.yml
+#   3. For custom setup: Mix and match models/nodes from this example
+#   4. Restart: docker compose restart (no rebuild needed!)
+#
+# Default config.yml is minimal (SD 1.5 + ComfyUI Manager) for fast builds.
+# This example shows the full WAN Animate 2.2 setup.
+
+# ============================================================================
+# Models Configuration
+# ============================================================================
+models:
+  # SDXL VAE (Uncomment to enable)
+  # - url: https://huggingface.co/stabilityai/sdxl-vae/resolve/main/sdxl_vae.safetensors
+  #   destination: vae
+  #   optional: false
+
+  # SDXL Base Model
+  # - url: https://huggingface.co/stabilityai/stable-diffusion-xl-base-1.0/resolve/main/sd_xl_base_1.0.safetensors
+  #   destination: checkpoints
+
+  # SD 1.5 Model
+  # - url: https://huggingface.co/runwayml/stable-diffusion-v1-5/resolve/main/v1-5-pruned-emaonly.safetensors
+  #   destination: checkpoints
+
+  # WAN Animate 2.2 Models (Complete Set)
+  # Core Models
+  - url: https://huggingface.co/Aitrepreneur/FLX/resolve/main/clip_vision_h.safetensors
+    destination: clip_vision
+  - url: https://huggingface.co/Aitrepreneur/FLX/resolve/main/Wan2_2-Animate-14B_fp8_scaled_e4m3fn_KJ_v2.safetensors
+    destination: diffusion_models
+  - url: https://huggingface.co/Aitrepreneur/FLX/resolve/main/umt5-xxl-enc-bf16.safetensors
+    destination: text_encoders
+  - url: https://huggingface.co/Aitrepreneur/FLX/resolve/main/Wan2_1_VAE_bf16.safetensors
+    destination: vae
+
+  # Detection Models (Pose Estimation)
+  - url: https://huggingface.co/Aitrepreneur/FLX/resolve/main/vitpose_h_wholebody_data.bin
+    destination: detection
+  - url: https://huggingface.co/Aitrepreneur/FLX/resolve/main/vitpose_h_wholebody_model.onnx
+    destination: detection
+  - url: https://huggingface.co/Aitrepreneur/FLX/resolve/main/vitpose-l-wholebody.onnx
+    destination: detection
+  - url: https://huggingface.co/Aitrepreneur/FLX/resolve/main/yolov10m.onnx
+    destination: detection
+
+  # LoRA Models (Lighting & Effects)
+  - url: https://huggingface.co/Aitrepreneur/FLX/resolve/main/lightx2v_I2V_14B_480p_cfg_step_distill_rank64_bf16.safetensors
+    destination: loras
+  - url: https://huggingface.co/Aitrepreneur/FLX/resolve/main/WanAnimate_relight_lora_fp16.safetensors
+    destination: loras
+
+  # SAM Model (Segmentation)
+  - url: https://huggingface.co/Aitrepreneur/FLX/resolve/main/SeC-4B-fp16.safetensors
+    destination: sams
+
+# ============================================================================
+# Custom Nodes Configuration
+# ============================================================================
+nodes:
+  # Essential Nodes (Recommended)
+
+  # ComfyUI Manager - Package manager for custom nodes
+  - url: https://github.com/ltdrdata/ComfyUI-Manager.git
+    version: latest
+
+  # Popular Custom Nodes (Uncomment what you need)
+
+  # KJNodes - Utility nodes, masks, and more
+  - url: https://github.com/kijai/ComfyUI-KJNodes.git
+    version: latest
+
+  # IP Adapter Plus - Advanced image prompting
+  - url: https://github.com/cubiq/ComfyUI_IPAdapter_plus.git
+    version: latest
+
+  # ControlNet Auxiliary Preprocessors
+  - url: https://github.com/Fannovel16/comfyui_controlnet_aux.git
+    version: latest
+
+  # AnimateDiff Evolved - Video generation
+  - url: https://github.com/Kosinkadink/ComfyUI-AnimateDiff-Evolved.git
+    version: latest
+
+  # Video Helper Suite - Video I/O and processing
+  - url: https://github.com/Kosinkadink/ComfyUI-VideoHelperSuite.git
+    version: latest
+
+  # Advanced ControlNet
+  - url: https://github.com/Kosinkadink/ComfyUI-Advanced-ControlNet.git
+    version: latest
+
+  # Impact Pack - QoL improvements
+  - url: https://github.com/ltdrdata/ComfyUI-Impact-Pack.git
+    version: latest
+
+  # Inspire Pack - More QoL improvements
+  - url: https://github.com/ltdrdata/ComfyUI-Inspire-Pack.git
+    version: latest
+
+  # WAN Animate Nodes
+  - url: https://github.com/kijai/ComfyUI-WanVideoWrapper.git
+    version: latest
+  - url: https://github.com/kijai/ComfyUI-WanAnimatePreprocess.git
+    version: latest
+  - url: https://github.com/kijai/ComfyUI-segment-anything-2.git
+    version: latest
+  - url: https://github.com/rgthree/rgthree-comfy.git
+    version: latest
+  - url: https://github.com/9nate-drake/Comfyui-SecNodes.git
+    version: latest
+
+  # Specialized Nodes
+  - url: https://github.com/city96/ComfyUI-GGUF.git
+    version: latest
+  # - url: https://github.com/ExponentialML/ComfyUI-ELLA.git
+  #   version: latest
+  - url: https://github.com/kijai/ComfyUI-Florence2.git
+    version: latest
+  # - url: https://github.com/black-forest-labs/ComfyUI-Flux.git
+  #   version: latest
+
+# ============================================================================
+# Valid Model Destinations
+# ============================================================================
+# checkpoints, clip, clip_vision, configs, controlnet, diffusion_models,
+# embeddings, loras, upscale_models, vae, sams, detection, text_encoders,
+# unet, style_models, hypernetworks
+
+# ============================================================================
+# Valid Node Version Specifiers
+# ============================================================================
+# latest    - Latest stable release (git tag)
+# nightly   - Latest commit on default branch
+# v1.2.3    - Specific version tag (semver)
+# abc123    - Specific commit hash
+# main      - Specific branch name

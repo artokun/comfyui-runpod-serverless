@@ -13,7 +13,11 @@ RunPod serverless worker that executes ComfyUI workflows via API. Handler bridge
 docker compose up                    # Start ComfyUI + handler
 python examples/test_local.py        # Test without Docker
 
-# Configuration management
+# Configuration management (NO REBUILD NEEDED!)
+nano config.yml                      # Edit models/nodes
+docker compose restart               # Apply changes instantly
+
+# Advanced configuration commands
 python download_models.py            # Download models from config.yml
 python download_models.py --dry-run  # Preview what will download
 python install_nodes.py              # Install nodes from config.yml
@@ -32,6 +36,8 @@ Access locally: http://localhost:8188 (ComfyUI UI), http://localhost:8000 (API)
 ## Architecture
 
 **Single Dockerfile with auto-install**: ComfyUI clones to `./ComfyUI` on first run. Models and custom nodes auto-install from `config.yml` if configured. Persistent across rebuilds.
+
+**Default configuration**: Minimal setup (SD 1.5 + ComfyUI Manager, ~4GB) for fast builds. Advanced setups (WAN Animate 2.2, ~30GB) available in `config.example.yml`.
 
 **Handler flow** (handler.py):
 1. Receives job from RunPod
@@ -61,6 +67,8 @@ Access locally: http://localhost:8188 (ComfyUI UI), http://localhost:8000 (API)
 
 ## Configuration (config.yml)
 
+**Important: config.yml is mounted as a volume - edit anytime without rebuilding!**
+
 Edit `config.yml` to configure models and custom nodes:
 
 ```yaml
@@ -81,6 +89,22 @@ nodes:
 **Node versions**: `latest` (stable release), `nightly` (latest commit), `v1.2.3` (specific tag), commit hash, or branch name.
 
 Both auto-install on container start if configured. Models support `optional: true` flag.
+
+## Runtime Configuration Override
+
+For cloud deployments (RunPod, AWS, etc.), you can override config.yml via environment variable:
+
+```bash
+# Set CONFIG_YML environment variable with entire config content
+CONFIG_YML="models:
+  - url: https://huggingface.co/.../model.safetensors
+    destination: checkpoints
+nodes:
+  - url: https://github.com/.../custom-node.git
+    version: latest"
+```
+
+On startup, if `CONFIG_YML` is set, it will be written to `/comfyui/../config.yml` (highest priority). This allows customization without rebuilding images or mounting volumes.
 
 ## S3 Upload (Optional)
 
