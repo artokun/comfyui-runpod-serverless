@@ -15,17 +15,17 @@
 # ============================================================================
 models:
   # SDXL VAE (Uncomment to enable)
-  # - url: https://huggingface.co/stabilityai/sdxl-vae/resolve/main/sdxl_vae.safetensors
-  #   destination: vae
-  #   optional: false
+  - url: https://huggingface.co/stabilityai/sdxl-vae/resolve/main/sdxl_vae.safetensors
+    destination: vae
+    optional: false
 
   # SDXL Base Model
-  # - url: https://huggingface.co/stabilityai/stable-diffusion-xl-base-1.0/resolve/main/sd_xl_base_1.0.safetensors
-  #   destination: checkpoints
+  - url: https://huggingface.co/stabilityai/stable-diffusion-xl-base-1.0/resolve/main/sd_xl_base_1.0.safetensors
+    destination: checkpoints
 
   # SD 1.5 Model
-  # - url: https://huggingface.co/runwayml/stable-diffusion-v1-5/resolve/main/v1-5-pruned-emaonly.safetensors
-  #   destination: checkpoints
+  - url: https://huggingface.co/runwayml/stable-diffusion-v1-5/resolve/main/v1-5-pruned-emaonly.safetensors
+    destination: checkpoints
 
   # WAN Animate 2.2 Models (Complete Set)
   # Core Models
