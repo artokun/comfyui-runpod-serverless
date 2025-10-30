@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
 """
 ComfyUI Custom Nodes Installer
-Parses nodes.txt and installs custom nodes with version control.
+Parses config.yml and installs custom nodes with version control.
 
 Usage:
     python install_nodes.py [options]
 
 Options:
-    --nodes-file PATH       Path to nodes.txt (default: ./nodes.txt)
+    --config PATH           Path to config.yml (default: ./config.yml)
     --comfyui-dir PATH      ComfyUI directory (default: ./ComfyUI)
     --dry-run               Show what would be installed without installing
-    --validate-only         Only validate the nodes file
+    --validate-only         Only validate the config file
     --force                 Force reinstall even if node exists
     --skip-deps             Skip installing node dependencies
     --verbose               Show detailed output
@@ -24,6 +24,13 @@ import sys
 from pathlib import Path
 from typing import List, Tuple, Optional, Dict
 from dataclasses import dataclass
+
+try:
+    import yaml
+    YAML_AVAILABLE = True
+except ImportError:
+    YAML_AVAILABLE = False
+    print("Warning: PyYAML not installed. Install with: pip install pyyaml")
 
 
 @dataclass
@@ -47,12 +54,7 @@ class NodeEntry:
 
 
 class NodeFileParser:
-    """Parses nodes.txt file"""
-
-    # Pattern: URL @ version
-    ENTRY_PATTERN = re.compile(
-        r'^(?P<url>https?://[^\s@]+(?:\.git)?)\s+@\s+(?P<version>\S+)$'
-    )
+    """Parses config.yml file"""
 
     def __init__(self, file_path: Path):
         self.file_path = file_path
@@ -60,47 +62,61 @@ class NodeFileParser:
         self.warnings: List[str] = []
 
     def parse(self) -> List[NodeEntry]:
-        """Parse the nodes file and return list of entries"""
-        entries = []
-
+        """Parse the config file and return list of node entries"""
         if not self.file_path.exists():
-            self.errors.append(f"Nodes file not found: {self.file_path}")
-            return entries
+            self.errors.append(f"Config file not found: {self.file_path}")
+            return []
 
-        with open(self.file_path, 'r', encoding='utf-8') as f:
-            for line_num, line in enumerate(f, 1):
-                line = line.strip()
+        return self._parse_yaml()
 
-                # Skip comments and empty lines
-                if not line or line.startswith('#'):
-                    continue
+    def _parse_yaml(self) -> List[NodeEntry]:
+        """Parse YAML config file"""
+        if not YAML_AVAILABLE:
+            self.errors.append("PyYAML not available. Cannot parse YAML config.")
+            return []
 
-                # Try to parse the entry
-                match = self.ENTRY_PATTERN.match(line)
-                if not match:
-                    self.errors.append(f"Line {line_num}: Invalid format: {line}")
-                    continue
+        try:
+            with open(self.file_path, 'r', encoding='utf-8') as f:
+                config = yaml.safe_load(f)
+        except yaml.YAMLError as e:
+            self.errors.append(f"YAML parsing error: {e}")
+            return []
 
-                url = match.group('url')
-                version = match.group('version')
+        if not config:
+            self.warnings.append("Config file is empty")
+            return []
 
-                # Validate URL format
-                if not self._validate_url(url):
-                    self.warnings.append(
-                        f"Line {line_num}: URL may not be a valid git repository: {url}"
-                    )
+        nodes_config = config.get('nodes', [])
+        if not isinstance(nodes_config, list):
+            self.errors.append("'nodes' section must be a list")
+            return []
 
-                # Validate version format
-                if not self._validate_version(version):
-                    self.warnings.append(
-                        f"Line {line_num}: Unusual version specifier: {version}"
-                    )
+        entries = []
+        for idx, node in enumerate(nodes_config, 1):
+            if not isinstance(node, dict):
+                self.warnings.append(f"Node entry {idx} is not a dictionary, skipping")
+                continue
 
-                entries.append(NodeEntry(
-                    url=url,
-                    version=version,
-                    line_number=line_num
-                ))
+            url = node.get('url')
+            version = node.get('version', 'latest')
+
+            if not url:
+                self.warnings.append(f"Node entry {idx} missing 'url', skipping")
+                continue
+
+            # Validate URL
+            if not self._validate_url(url):
+                self.warnings.append(f"Node entry {idx}: URL may not be a valid git repository: {url}")
+
+            # Validate version
+            if not self._validate_version(version):
+                self.warnings.append(f"Node entry {idx}: Unusual version specifier: {version}")
+
+            entries.append(NodeEntry(
+                url=url,
+                version=version,
+                line_number=idx
+            ))
 
         return entries
 
@@ -422,15 +438,15 @@ class NodeInstaller:
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Install ComfyUI custom nodes from nodes.txt",
+        description="Install ComfyUI custom nodes from config.yml",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=__doc__
     )
     parser.add_argument(
-        "--nodes-file",
+        "--config",
         type=Path,
-        default=Path("nodes.txt"),
-        help="Path to nodes.txt (default: ./nodes.txt)"
+        default=Path("config.yml"),
+        help="Path to config.yml (default: ./config.yml)"
     )
     parser.add_argument(
         "--comfyui-dir",
@@ -446,7 +462,7 @@ def main():
     parser.add_argument(
         "--validate-only",
         action="store_true",
-        help="Only validate the nodes file"
+        help="Only validate the config file"
     )
     parser.add_argument(
         "--force",
@@ -473,9 +489,9 @@ def main():
         print("Error: git is not installed or not in PATH")
         return 1
 
-    # Parse the nodes file
-    print(f"Parsing nodes file: {args.nodes_file}")
-    file_parser = NodeFileParser(args.nodes_file)
+    # Parse the config file
+    print(f"Parsing config file: {args.config}")
+    file_parser = NodeFileParser(args.config)
     entries = file_parser.parse()
 
     # Show errors

@@ -28,6 +28,11 @@ if [ ! -f "$COMFYUI_PATH/main.py" ]; then
     echo "ComfyUI not found at: $COMFYUI_PATH"
     echo "Cloning ComfyUI..."
 
+    # Remove empty directory if it exists
+    if [ -d "$COMFYUI_PATH" ] && [ -z "$(ls -A "$COMFYUI_PATH")" ]; then
+        rmdir "$COMFYUI_PATH"
+    fi
+
     mkdir -p "$(dirname "$COMFYUI_PATH")"
     git clone https://github.com/comfyanonymous/ComfyUI.git "$COMFYUI_PATH"
 
@@ -77,27 +82,27 @@ echo "  Models Path: ${MODELS_PATH}"
 echo "  Environment: ${ENVIRONMENT}"
 echo ""
 
-# Install custom nodes if nodes.txt exists
-if [ -f "/app/nodes.txt" ] || [ -f "$COMFYUI_PATH/../nodes.txt" ]; then
+# Install custom nodes from config.yml
+if [ -f "/app/config.yml" ] || [ -f "$COMFYUI_PATH/../config.yml" ]; then
     echo "Checking for custom nodes to install..."
 
-    # Determine nodes.txt location
-    if [ -f "/app/nodes.txt" ]; then
-        NODES_FILE="/app/nodes.txt"
-    else
-        NODES_FILE="$COMFYUI_PATH/../nodes.txt"
+    # Determine config file location
+    CONFIG_FILE=""
+    if [ -f "/app/config.yml" ]; then
+        CONFIG_FILE="/app/config.yml"
+    elif [ -f "$COMFYUI_PATH/../config.yml" ]; then
+        CONFIG_FILE="$COMFYUI_PATH/../config.yml"
     fi
 
-    # Check if there are any uncommented entries
-    ACTIVE_NODES=$(grep -v "^#" "$NODES_FILE" | grep -v "^$" | grep -E "https?://" | wc -l)
+    if [ -n "$CONFIG_FILE" ] && [ -f "/app/install_nodes.py" ]; then
+        # Count active node entries
+        ACTIVE_NODES=$(grep -A 2 "^  - url:" "$CONFIG_FILE" | grep -v "^#" | grep "url:" | wc -l || echo "0")
 
-    if [ "$ACTIVE_NODES" -gt 0 ]; then
-        echo "Found $ACTIVE_NODES custom node(s) to install"
+        if [ "$ACTIVE_NODES" -gt 0 ]; then
+            echo "Found $ACTIVE_NODES custom node(s) to install"
 
-        # Run the install script
-        if [ -f "/app/install_nodes.py" ]; then
             python3 /app/install_nodes.py \
-                --nodes-file "$NODES_FILE" \
+                --config "$CONFIG_FILE" \
                 --comfyui-dir "$COMFYUI_PATH"
 
             if [ $? -eq 0 ]; then
@@ -106,35 +111,35 @@ if [ -f "/app/nodes.txt" ] || [ -f "$COMFYUI_PATH/../nodes.txt" ]; then
                 echo "⚠ Some custom nodes failed to install (check logs above)"
             fi
         else
-            echo "⚠ install_nodes.py not found, skipping custom node installation"
+            echo "No custom nodes configured for installation (all commented out)"
         fi
     else
-        echo "No custom nodes configured for installation (all commented out)"
+        echo "⚠ config.yml or install_nodes.py not found, skipping custom node installation"
     fi
     echo ""
 fi
 
-# Download models if models.txt exists
-if [ -f "/app/models.txt" ] || [ -f "$COMFYUI_PATH/../models.txt" ]; then
+# Download models from config.yml
+if [ -f "/app/config.yml" ] || [ -f "$COMFYUI_PATH/../config.yml" ]; then
     echo "Checking for models to download..."
 
-    # Determine models.txt location
-    if [ -f "/app/models.txt" ]; then
-        MODELS_FILE="/app/models.txt"
-    else
-        MODELS_FILE="$COMFYUI_PATH/../models.txt"
+    # Determine config file location
+    CONFIG_FILE=""
+    if [ -f "/app/config.yml" ]; then
+        CONFIG_FILE="/app/config.yml"
+    elif [ -f "$COMFYUI_PATH/../config.yml" ]; then
+        CONFIG_FILE="$COMFYUI_PATH/../config.yml"
     fi
 
-    # Check if there are any uncommented entries
-    ACTIVE_MODELS=$(grep -v "^#" "$MODELS_FILE" | grep -v "^$" | grep -E "https?://" | wc -l)
+    if [ -n "$CONFIG_FILE" ] && [ -f "/app/download_models.py" ]; then
+        # Count active model entries
+        ACTIVE_MODELS=$(grep -A 2 "^  - url:" "$CONFIG_FILE" | grep -v "^#" | grep "url:" | wc -l || echo "0")
 
-    if [ "$ACTIVE_MODELS" -gt 0 ]; then
-        echo "Found $ACTIVE_MODELS model(s) to download"
+        if [ "$ACTIVE_MODELS" -gt 0 ]; then
+            echo "Found $ACTIVE_MODELS model(s) to download"
 
-        # Run the download script
-        if [ -f "/app/download_models.py" ]; then
             python3 /app/download_models.py \
-                --models-file "$MODELS_FILE" \
+                --config "$CONFIG_FILE" \
                 --base-dir "$COMFYUI_PATH/models"
 
             if [ $? -eq 0 ]; then
@@ -143,10 +148,10 @@ if [ -f "/app/models.txt" ] || [ -f "$COMFYUI_PATH/../models.txt" ]; then
                 echo "⚠ Some model downloads failed (check logs above)"
             fi
         else
-            echo "⚠ download_models.py not found, skipping model downloads"
+            echo "No models configured for download (all commented out)"
         fi
     else
-        echo "No models configured for download (all commented out)"
+        echo "⚠ config.yml or download_models.py not found, skipping model downloads"
     fi
     echo ""
 fi

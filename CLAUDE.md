@@ -13,12 +13,10 @@ RunPod serverless worker that executes ComfyUI workflows via API. Handler bridge
 docker compose up                    # Start ComfyUI + handler
 python examples/test_local.py        # Test without Docker
 
-# Model management
-python download_models.py            # Download models from models.txt
+# Configuration management
+python download_models.py            # Download models from config.yml
 python download_models.py --dry-run  # Preview what will download
-
-# Custom nodes
-python install_nodes.py              # Install nodes from nodes.txt
+python install_nodes.py              # Install nodes from config.yml
 python install_nodes.py --dry-run    # Preview what will install
 
 # Deploy to RunPod
@@ -33,7 +31,7 @@ Access locally: http://localhost:8188 (ComfyUI UI), http://localhost:8000 (API)
 
 ## Architecture
 
-**Single Dockerfile with auto-install**: ComfyUI clones to `./ComfyUI` on first run. Models and custom nodes auto-install from `models.txt` and `nodes.txt` if configured. Persistent across rebuilds.
+**Single Dockerfile with auto-install**: ComfyUI clones to `./ComfyUI` on first run. Models and custom nodes auto-install from `config.yml` if configured. Persistent across rebuilds.
 
 **Handler flow** (handler.py):
 1. Receives job from RunPod
@@ -53,43 +51,36 @@ Access locally: http://localhost:8188 (ComfyUI UI), http://localhost:8000 (API)
 
 - **handler.py** - Main worker with S3 upload support, WebSocket monitoring
 - **s3_upload.py** - Optional S3 upload module (requires boto3 + BUCKET_* env vars)
-- **download_models.py** - Automated model downloader (parses models.txt)
-- **install_nodes.py** - Custom node installer with version control (parses nodes.txt)
-- **models.txt** - Model download config (URL -> destination format)
-- **nodes.txt** - Custom nodes install config (git_url @ version format)
+- **download_models.py** - Automated model downloader (parses config.yml)
+- **install_nodes.py** - Custom node installer with version control (parses config.yml)
+- **config.yml** - Unified configuration for models and custom nodes
 - **start.sh** - Container startup (auto-installs ComfyUI, nodes, models, starts services)
 - **build.sh** - Multi-arch build script (targets production mode)
 - **deploy.sh** - Wrapper for build + push
 - **examples/test_local.py** - Test script simulating RunPod
 
-## Model Management
+## Configuration (config.yml)
 
-Edit `models.txt` to configure automatic model downloads:
+Edit `config.yml` to configure models and custom nodes:
 
-```
-# Format: URL -> destination [flags]
-https://huggingface.co/stabilityai/sdxl-vae/resolve/main/sdxl_vae.safetensors -> vae
-https://civitai.com/api/download/models/12345 -> checkpoints /optional
-```
+```yaml
+# Models section
+models:
+  - url: https://huggingface.co/stabilityai/sdxl-vae/resolve/main/sdxl_vae.safetensors
+    destination: vae
+    optional: false
 
-Valid destinations: `checkpoints`, `vae`, `loras`, `controlnet`, `clip_vision`, `embeddings`, `upscale_models`, `diffusion_models`, `text_encoders`, etc.
-
-Models download automatically on container start if missing. Use `/optional` or `/skip` flags to mark as skippable.
-
-## Custom Nodes
-
-Edit `nodes.txt` to configure automatic custom node installation:
-
-```
-# Format: git_url @ version
-https://github.com/ltdrdata/ComfyUI-Manager.git @ latest
-https://github.com/kijai/ComfyUI-KJNodes.git @ v1.0.5
-https://github.com/cubiq/ComfyUI_IPAdapter_plus.git @ nightly
+# Custom nodes section
+nodes:
+  - url: https://github.com/ltdrdata/ComfyUI-Manager.git
+    version: latest
 ```
 
-Version specifiers: `latest` (stable release), `nightly` (latest commit), `v1.2.3` (specific tag), commit hash, or branch name.
+**Model destinations**: `checkpoints`, `vae`, `loras`, `controlnet`, `clip_vision`, `embeddings`, `upscale_models`, `diffusion_models`, `text_encoders`, etc.
 
-Nodes install automatically on container start if missing. Includes dependency installation.
+**Node versions**: `latest` (stable release), `nightly` (latest commit), `v1.2.3` (specific tag), commit hash, or branch name.
+
+Both auto-install on container start if configured. Models support `optional: true` flag.
 
 ## S3 Upload (Optional)
 
@@ -122,6 +113,32 @@ Override example: `{"node_id": "6", "field": "inputs.text", "value": "new prompt
 - **Timeout**: Increase `timeout` param or optimize workflow.
 - **Connection error**: ComfyUI not running on `COMFY_API_URL`.
 - **GPU not found**: Install NVIDIA Container Toolkit.
-- **Models not downloading**: Check `models.txt` format and network connectivity.
-- **Custom nodes failing**: Check `nodes.txt` format, git URL validity, version exists.
-- **Missing node in workflow**: Install required custom node via `nodes.txt`.
+- **Models not downloading**: Check `config.yml` models section format and network connectivity.
+- **Custom nodes failing**: Check `config.yml` nodes section format, git URL validity, version exists.
+- **Missing node in workflow**: Install required custom node via `config.yml` nodes section.
+
+## Contributing
+
+This is an open-source project. Contributions welcome!
+
+**Setup for contributors**:
+```bash
+pip install -r requirements-dev.txt  # Install dev dependencies
+pre-commit install                   # Setup git hooks
+pytest                               # Run tests
+```
+
+**Key areas**:
+- Tests: `tests/` directory (pytest framework, aim for >70% coverage)
+- Code style: Black, flake8, isort, mypy (enforced by pre-commit hooks)
+- CI/CD: GitHub Actions (`.github/workflows/`)
+- Docs: Update README.md and CLAUDE.md for user-facing changes
+
+**Commit format**: Follow [Conventional Commits](https://www.conventionalcommits.org/)
+- `feat:` - New feature
+- `fix:` - Bug fix
+- `docs:` - Documentation
+- `test:` - Tests
+- `refactor:` - Code changes without feature/fix
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed guidelines.

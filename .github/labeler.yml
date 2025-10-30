@@ -1,0 +1,30 @@
+# Auto-labeler configuration
+
+documentation:
+  - '**/*.md'
+  - docs/**/*
+
+docker:
+  - Dockerfile*
+  - docker-compose.yml
+  - .dockerignore
+
+tests:
+  - tests/**/*
+  - pytest.ini
+  - requirements-dev.txt
+
+ci/cd:
+  - .github/workflows/**/*
+
+python:
+  - '**/*.py'
+
+dependencies:
+  - requirements*.txt
+  - pyproject.toml
+
+configuration:
+  - config.yml
+  - download_models.py
+  - install_nodes.py

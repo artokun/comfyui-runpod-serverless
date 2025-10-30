@@ -1,6 +1,13 @@
-# ComfyUI + RunPod Handler
+# ComfyUI RunPod Handler
+
+[![CI](https://github.com/YOUR-USERNAME/comfyui-runpod-handler/actions/workflows/ci.yml/badge.svg)](https://github.com/YOUR-USERNAME/comfyui-runpod-handler/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
+[![Docker](https://img.shields.io/badge/docker-ready-brightgreen.svg)](https://www.docker.com/)
 
 Run ComfyUI locally with a RunPod-compatible API handler, then deploy to RunPod serverless.
+
+> **Open Source**: This project is open source and welcomes contributions! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
 ## Quick Start
 
@@ -25,14 +32,24 @@ Press `Ctrl+C` to stop.
 
 ## Deploy to RunPod
 
-When you're ready for production:
+### Using Official Images (Recommended)
+
+Use the pre-built images that auto-deploy on every release:
+
+**RunPod Endpoint Configuration:**
+- **RTX 4090:** `alongbottom/comfyui-runpod:ada`
+- **RTX 5090/6000 Pro:** `alongbottom/comfyui-runpod:blackwell`
+
+These images are automatically built and deployed via GitHub Actions on every merge to `main`.
+
+### Manual Deploy (Maintainers Only)
+
+If you need to build and deploy manually:
 
 ```bash
 ./deploy.sh ada          # RTX 4090
 ./deploy.sh blackwell    # RTX 5090/6000 Pro
 ```
-
-Then configure your RunPod endpoint with: `alongbottom/comfyui-runpod:ada`
 
 Same workflows, same API format, just runs on RunPod's GPUs!
 
@@ -61,20 +78,27 @@ Uncomment and set `MODELS_PATH` in `.env` to mount your existing models.
 - Update anytime: `cd ComfyUI && git pull`
 - Or enable auto-updates with `AUTO_UPDATE=true`
 
-**Model Management:**
-Edit `models.txt` to specify which models to download automatically:
+**Configuration:**
+Edit `config.yml` to specify models and custom nodes to install automatically:
+```yaml
+models:
+  - url: https://huggingface.co/stabilityai/sdxl-vae/resolve/main/sdxl_vae.safetensors
+    destination: vae
+
+nodes:
+  - url: https://github.com/ltdrdata/ComfyUI-Manager.git
+    version: latest
 ```
-# Simple format: URL -> destination
-https://huggingface.co/stabilityai/sdxl-vae/resolve/main/sdxl_vae.safetensors -> vae
-```
-Models download automatically on container start if missing.
+Models and nodes download/install automatically on container start if configured.
 
 **Custom Nodes:**
-Edit `nodes.txt` to specify which custom nodes to install:
-```
-# Simple format: URL @ version
-https://github.com/ltdrdata/ComfyUI-Manager.git @ latest
-https://github.com/kijai/ComfyUI-KJNodes.git @ v1.0.5
+Add custom nodes to `config.yml`:
+```yaml
+nodes:
+  - url: https://github.com/ltdrdata/ComfyUI-Manager.git
+    version: latest
+  - url: https://github.com/kijai/ComfyUI-KJNodes.git
+    version: v1.0.5
 ```
 Nodes install automatically on container start with full version control.
 
@@ -96,8 +120,7 @@ comfy-template/
 ├── update-comfyui.sh         # Manual ComfyUI update script
 ├── download_models.py        # Model downloader (auto-run by start.sh)
 ├── install_nodes.py          # Custom nodes installer (auto-run by start.sh)
-├── models.txt                # Model download configuration
-├── nodes.txt                 # Custom nodes configuration
+├── config.yml                # Unified configuration (models + nodes)
 │
 ├── ComfyUI/                  # Auto-created on first run
 │   ├── main.py               # ComfyUI application
@@ -189,12 +212,22 @@ Configure in RunPod console - same workflows work immediately!
 
 ## Documentation
 
-- **[Custom Nodes Guide](docs/CUSTOM_NODES.md)** - Automatic custom nodes installation with version control
-- **[Model Management Guide](docs/MODEL_MANAGEMENT.md)** - Automatic model downloads
-- **[Docker Compose Guide](docs/DOCKER_COMPOSE.md)** - Detailed local development guide
-- **[External ComfyUI](docs/EXTERNAL_COMFYUI.md)** - Mount ComfyUI from filesystem (updateable)
-- **[RunPod Deployment](docs/RUNPOD_DEPLOYMENT.md)** - Deploy to production
-- **[RunPod Configuration](docs/RUNPOD_CONFIG.md)** - Endpoint settings reference
+### Quick Start
+- **[RunPod Quickstart](RUNPOD_QUICKSTART.md)** ⚡ - Deploy to RunPod in 5 minutes
+
+### Deployment
+- **[Deployment Guide](docs/DEPLOYMENT.md)** - Overview of all deployment options
+- **[RunPod Deployment](docs/RUNPOD_DEPLOYMENT.md)** - Complete RunPod setup
+- **[Auto-Deploy](docs/AUTO_DEPLOY.md)** - Automated CI/CD with GitHub Actions
+- **[Docker Hub Setup](docs/DOCKER_HUB_SETUP.md)** - For forkers only
+
+### Configuration
+- **[Model Management](docs/MODEL_MANAGEMENT.md)** - Automatic model downloads
+- **[Custom Nodes](docs/CUSTOM_NODES.md)** - Installing custom nodes with version control
+- **[Docker Compose](docs/DOCKER_COMPOSE.md)** - Local development guide
+
+### Reference
+- **[RunPod Configuration](docs/RUNPOD_CONFIG.md)** - Endpoint settings
 - **[Testing Guide](docs/TESTING.md)** - Testing workflows and API
 - **[Installer Patterns](docs/INSTALLER_PATTERNS.md)** - Implementation details
 
@@ -335,12 +368,51 @@ See `examples/` directory for:
 
 ## Contributing
 
-Issues and PRs welcome! This project uses patterns from production ComfyUI installers - see [docs/INSTALLER_PATTERNS.md](docs/INSTALLER_PATTERNS.md).
+We welcome contributions! Please see our [Contributing Guidelines](CONTRIBUTING.md) for details on:
+
+- 🐛 **Reporting bugs**
+- ✨ **Proposing features**
+- 🔧 **Submitting pull requests**
+- 📝 **Improving documentation**
+
+### Quick Start for Contributors
+
+```bash
+# Fork and clone the repo
+git clone https://github.com/YOUR-USERNAME/comfyui-runpod-handler.git
+cd comfyui-runpod-handler
+
+# Install development dependencies
+pip install -r requirements-dev.txt
+
+# Install pre-commit hooks
+pre-commit install
+
+# Run tests
+pytest
+
+# Start development environment
+docker compose up
+```
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed instructions.
+
+## Community
+
+- **Issues**: [GitHub Issues](https://github.com/YOUR-USERNAME/comfyui-runpod-handler/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/YOUR-USERNAME/comfyui-runpod-handler/discussions)
+- **Code of Conduct**: [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)
 
 ## License
 
-MIT
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 ## Credits
 
-Built using ComfyUI by comfyanonymous. Deployment patterns inspired by WAN-ANIMATE and other production installers.
+- Built using [ComfyUI](https://github.com/comfyanonymous/ComfyUI) by comfyanonymous
+- Deployment patterns inspired by [WAN-ANIMATE](https://github.com/kijai/WAN-ANIMATE) and other production installers
+- RunPod serverless infrastructure by [RunPod](https://www.runpod.io/)
+
+## Acknowledgments
+
+Special thanks to all [contributors](https://github.com/YOUR-USERNAME/comfyui-runpod-handler/graphs/contributors) who have helped improve this project!

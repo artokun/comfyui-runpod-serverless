@@ -22,7 +22,7 @@ ENV TORCHVISION_VERSION=0.16.0
 ENV TORCHAUDIO_VERSION=2.1.0
 ENV GPU_ARCH=ada
 
-FROM nvidia/cuda:12.4.0-cudnn-runtime-ubuntu22.04 AS base-blackwell
+FROM nvidia/cuda:12.4.1-cudnn-runtime-ubuntu22.04 AS base-blackwell
 ENV CUDA_VERSION=12.4
 ENV CUDA_TAG=cu124
 ENV TORCH_VERSION=2.5.0
@@ -103,11 +103,14 @@ RUN pip3 install --no-cache-dir -r requirements.txt
 
 # Copy handler and startup files
 COPY handler.py .
+COPY s3_upload.py .
 COPY start.sh .
 COPY download_models.py .
 COPY install_nodes.py .
-COPY models.txt .
-COPY nodes.txt .
+
+# Copy unified config file
+COPY config.yml .
+
 RUN chmod +x /app/start.sh /app/download_models.py /app/install_nodes.py
 
 # Environment variables

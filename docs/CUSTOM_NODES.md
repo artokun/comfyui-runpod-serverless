@@ -1,15 +1,17 @@
 # Custom Nodes Management Guide
 
-Automatically install and manage ComfyUI custom nodes with version control using a simple declarative format.
+Automatically install and manage ComfyUI custom nodes with version control using a unified YAML configuration.
 
 ## Quick Start
 
-1. **Edit `nodes.txt`** - Uncomment nodes you want to install:
+1. **Edit `config.yml`** - Add nodes you want to install:
 
-```
-# Uncomment nodes you need:
-https://github.com/ltdrdata/ComfyUI-Manager.git @ latest
-https://github.com/kijai/ComfyUI-KJNodes.git @ v1.0.5
+```yaml
+nodes:
+  - url: https://github.com/ltdrdata/ComfyUI-Manager.git
+    version: latest
+  - url: https://github.com/kijai/ComfyUI-KJNodes.git
+    version: v1.0.5
 ```
 
 2. **Start container** - Nodes install automatically:
@@ -34,67 +36,77 @@ That's it! Custom nodes are installed on container start if they don't already e
 - ✅ **Flexible** - Mix latest, nightly, and pinned versions
 - ✅ **Transparent** - Clear what version is installed
 
-## Format
+## Configuration Format
 
-Simple syntax: `URL @ version`
+Edit `config.yml` to define your custom nodes:
 
-```
-<git_url> @ <version>
+```yaml
+nodes:
+  - url: <git_url>
+    version: <version_specifier>
 ```
 
 ### Version Specifiers:
 
 | Specifier | Description | Use Case | Example |
 |-----------|-------------|----------|---------|
-| `@latest` | Latest stable release (git tag) | Production stability | `@ latest` |
-| `@nightly` | Latest commit on default branch | Bleeding edge features | `@ nightly` |
-| `@v1.2.3` | Specific version tag (semver) | Pin exact version | `@ v1.0.5` |
-| `@commit` | Specific commit hash | Debug/test specific commit | `@ abc123def` |
-| `@branch` | Specific branch name | Test development branches | `@ develop` |
+| `latest` | Latest stable release (git tag) | Production stability | `version: latest` |
+| `nightly` | Latest commit on default branch | Bleeding edge features | `version: nightly` |
+| `v1.2.3` | Specific version tag (semver) | Pin exact version | `version: v1.0.5` |
+| `abc123` | Specific commit hash | Debug/test specific commit | `version: abc123def` |
+| `develop` | Specific branch name | Test development branches | `version: develop` |
 
 ### Examples:
 
-```
-# Latest stable release
-https://github.com/ltdrdata/ComfyUI-Manager.git @ latest
+```yaml
+nodes:
+  # Latest stable release
+  - url: https://github.com/ltdrdata/ComfyUI-Manager.git
+    version: latest
 
-# Specific version
-https://github.com/kijai/ComfyUI-KJNodes.git @ v1.0.5
+  # Specific version
+  - url: https://github.com/kijai/ComfyUI-KJNodes.git
+    version: v1.0.5
 
-# Latest development
-https://github.com/cubiq/ComfyUI_IPAdapter_plus.git @ nightly
+  # Latest development
+  - url: https://github.com/cubiq/ComfyUI_IPAdapter_plus.git
+    version: nightly
 
-# Specific branch
-https://github.com/user/custom-node.git @ main
+  # Specific branch
+  - url: https://github.com/user/custom-node.git
+    version: main
 
-# Specific commit
-https://github.com/user/custom-node.git @ abc123def456
+  # Specific commit
+  - url: https://github.com/user/custom-node.git
+    version: abc123def456
 ```
 
 ## Version Specifier Details
 
-### `@latest` - Latest Stable Release
+### `latest` - Latest Stable Release
 
 Uses the latest git tag:
-```
-https://github.com/kijai/ComfyUI-KJNodes.git @ latest
+```yaml
+- url: https://github.com/kijai/ComfyUI-KJNodes.git
+  version: latest
 ```
 
 **Behavior:**
 - Finds the most recent git tag
 - Checks out that tag
-- If no tags exist, falls back to `@nightly`
+- If no tags exist, falls back to `nightly`
 
 **Best for:**
 - Production deployments
 - When you want stable, tested releases
 - Projects that follow semantic versioning
 
-### `@nightly` - Latest Development
+### `nightly` - Latest Development
 
 Uses the latest commit on the default branch:
-```
-https://github.com/cubiq/ComfyUI_IPAdapter_plus.git @ nightly
+```yaml
+- url: https://github.com/cubiq/ComfyUI_IPAdapter_plus.git
+  version: nightly
 ```
 
 **Behavior:**
@@ -108,12 +120,12 @@ https://github.com/cubiq/ComfyUI_IPAdapter_plus.git @ nightly
 - Nodes that don't use release tags
 - When you need the absolute latest
 
-### `@vX.Y.Z` - Specific Version
+### `vX.Y.Z` - Specific Version
 
 Pins to a specific semantic version tag:
-```
-https://github.com/kijai/ComfyUI-KJNodes.git @ v1.0.5
-https://github.com/user/repo.git @ 2.1.0
+```yaml
+- url: https://github.com/kijai/ComfyUI-KJNodes.git
+  version: v1.0.5
 ```
 
 **Behavior:**
@@ -127,11 +139,12 @@ https://github.com/user/repo.git @ 2.1.0
 - Reproducible builds
 - CI/CD pipelines
 
-### `@commit` - Specific Commit Hash
+### Commit Hash - Specific Commit
 
 Pins to an exact commit:
-```
-https://github.com/user/repo.git @ abc123def456789
+```yaml
+- url: https://github.com/user/repo.git
+  version: abc123def456789
 ```
 
 **Behavior:**
@@ -145,12 +158,12 @@ https://github.com/user/repo.git @ abc123def456789
 - Absolute reproducibility
 - When a tag doesn't exist for needed code
 
-### `@branch` - Branch Name
+### Branch Name - Specific Branch
 
 Uses a specific branch:
-```
-https://github.com/user/repo.git @ develop
-https://github.com/user/repo.git @ feature/new-nodes
+```yaml
+- url: https://github.com/user/repo.git
+  version: develop
 ```
 
 **Behavior:**
@@ -166,79 +179,98 @@ https://github.com/user/repo.git @ feature/new-nodes
 
 ## Manual Installation/Testing
 
-Test your nodes.txt before running the container:
+Test your config.yml before running the container:
 
 ```bash
-# Validate format only
-python install_nodes.py --validate-only
-
 # Dry run (show what would be installed)
 python install_nodes.py --dry-run
 
 # Install nodes manually
-python install_nodes.py --verbose
+python install_nodes.py
 
 # Force reinstall
 python install_nodes.py --force
 
-# Skip dependency installation
-python install_nodes.py --skip-deps
+# Use custom config location
+python install_nodes.py --config /path/to/config.yml
 ```
 
 ## Usage Patterns
 
 ### Starter Pack (Essential Nodes)
 
-```
-# Package manager
-https://github.com/ltdrdata/ComfyUI-Manager.git @ latest
+```yaml
+nodes:
+  # Package manager
+  - url: https://github.com/ltdrdata/ComfyUI-Manager.git
+    version: latest
 
-# Utility nodes
-https://github.com/kijai/ComfyUI-KJNodes.git @ latest
+  # Utility nodes
+  - url: https://github.com/kijai/ComfyUI-KJNodes.git
+    version: latest
 ```
 
 ### Production Setup (Pinned Versions)
 
-```
-# Pin all nodes to specific versions for reproducibility
-https://github.com/ltdrdata/ComfyUI-Manager.git @ v2.47
-https://github.com/kijai/ComfyUI-KJNodes.git @ v1.0.5
-https://github.com/cubiq/ComfyUI_IPAdapter_plus.git @ v1.2.3
-https://github.com/Fannovel16/comfyui_controlnet_aux.git @ v1.0.0
+```yaml
+nodes:
+  # Pin all nodes to specific versions for reproducibility
+  - url: https://github.com/ltdrdata/ComfyUI-Manager.git
+    version: v2.47
+  - url: https://github.com/kijai/ComfyUI-KJNodes.git
+    version: v1.0.5
+  - url: https://github.com/cubiq/ComfyUI_IPAdapter_plus.git
+    version: v1.2.3
+  - url: https://github.com/Fannovel16/comfyui_controlnet_aux.git
+    version: v1.0.0
 ```
 
 ### Development Setup (Mix of Stable and Bleeding Edge)
 
-```
-# Core nodes: stable
-https://github.com/ltdrdata/ComfyUI-Manager.git @ latest
-https://github.com/kijai/ComfyUI-KJNodes.git @ latest
+```yaml
+nodes:
+  # Core nodes: stable
+  - url: https://github.com/ltdrdata/ComfyUI-Manager.git
+    version: latest
+  - url: https://github.com/kijai/ComfyUI-KJNodes.git
+    version: latest
 
-# Testing new features: nightly
-https://github.com/cubiq/ComfyUI_IPAdapter_plus.git @ nightly
-https://github.com/user/experimental-nodes.git @ develop
+  # Testing new features: nightly
+  - url: https://github.com/cubiq/ComfyUI_IPAdapter_plus.git
+    version: nightly
+  - url: https://github.com/user/experimental-nodes.git
+    version: develop
 ```
 
 ### WAN Animate 2.2 Complete Setup
 
-```
-# Required nodes for WAN Animate 2.2
-https://github.com/ltdrdata/ComfyUI-Manager.git @ latest
-https://github.com/kijai/ComfyUI-WanVideoWrapper.git @ latest
-https://github.com/rgthree/rgthree-comfy.git @ latest
-https://github.com/kijai/ComfyUI-KJNodes.git @ latest
-https://github.com/Kosinkadink/ComfyUI-VideoHelperSuite.git @ latest
-https://github.com/kijai/ComfyUI-segment-anything-2.git @ latest
-https://github.com/9nate-drake/Comfyui-SecNodes.git @ latest
-https://github.com/kijai/ComfyUI-WanAnimatePreprocess.git @ latest
+```yaml
+nodes:
+  # Required nodes for WAN Animate 2.2
+  - url: https://github.com/ltdrdata/ComfyUI-Manager.git
+    version: latest
+  - url: https://github.com/kijai/ComfyUI-WanVideoWrapper.git
+    version: latest
+  - url: https://github.com/rgthree/rgthree-comfy.git
+    version: latest
+  - url: https://github.com/kijai/ComfyUI-KJNodes.git
+    version: latest
+  - url: https://github.com/Kosinkadink/ComfyUI-VideoHelperSuite.git
+    version: latest
+  - url: https://github.com/kijai/ComfyUI-segment-anything-2.git
+    version: latest
+  - url: https://github.com/9nate-drake/Comfyui-SecNodes.git
+    version: latest
+  - url: https://github.com/kijai/ComfyUI-WanAnimatePreprocess.git
+    version: latest
 ```
 
 ## How It Works
 
 ### On Container Start
 
-1. Checks if `nodes.txt` exists
-2. Parses for active (uncommented) entries
+1. Checks if `config.yml` exists
+2. Parses nodes section for entries
 3. For each node:
    - Clones repository if missing
    - Updates repository if already installed
@@ -254,19 +286,10 @@ https://github.com/kijai/ComfyUI-WanAnimatePreprocess.git @ latest
 | Node doesn't exist | Clones and installs |
 | Node exists, same version | Skips (fast startup) |
 | Node exists, different version | Updates to new version |
-| Version is `@nightly` | Always updates |
-| Version is `@latest` | Checks for newer tag |
+| Version is `nightly` | Always updates |
+| Version is `latest` | Checks for newer tag |
 
 ## Troubleshooting
-
-### "Invalid format" Error
-
-Check your syntax:
-```
-✓ https://github.com/user/repo.git @ latest
-✗ https://github.com/user/repo.git@latest   # Missing spaces
-✗ https://github.com/user/repo @ latest     # Missing .git
-```
 
 ### "Clone failed" Error
 
@@ -285,7 +308,7 @@ git clone https://github.com/user/repo.git
 curl -I https://github.com/user/repo
 
 # For private repos, use SSH or tokens
-https://token@github.com/user/private-repo.git @ latest
+https://token@github.com/user/private-repo.git
 ```
 
 ### "Checkout failed" Error
@@ -319,42 +342,35 @@ git ls-remote https://github.com/user/repo.git | grep abc123
 # Install system dependencies first (in Dockerfile)
 RUN apt-get install -y build-essential python3-dev
 
-# Use --skip-deps to skip dependency installation
-python install_nodes.py --skip-deps
-
 # Install dependencies manually
 pip install -r ComfyUI/custom_nodes/node-name/requirements.txt
 ```
 
 ### Node Conflicts
 
-Some nodes conflict with each other:
-
-**Solution:**
-```
-# Comment out conflicting node
-# https://github.com/user/conflicting-node.git @ latest
-
-# Use alternative
-https://github.com/user/alternative-node.git @ latest
-```
+Some nodes conflict with each other. If you encounter issues, comment out or remove the conflicting node from `config.yml`.
 
 ## Advanced Usage
 
 ### Mixing Versions
 
-```
-# Stable core
-https://github.com/ltdrdata/ComfyUI-Manager.git @ v2.47
+```yaml
+nodes:
+  # Stable core
+  - url: https://github.com/ltdrdata/ComfyUI-Manager.git
+    version: v2.47
 
-# Latest features
-https://github.com/kijai/ComfyUI-KJNodes.git @ latest
+  # Latest features
+  - url: https://github.com/kijai/ComfyUI-KJNodes.git
+    version: latest
 
-# Bleeding edge experimental
-https://github.com/user/experimental.git @ nightly
+  # Bleeding edge experimental
+  - url: https://github.com/user/experimental.git
+    version: nightly
 
-# Testing specific commit
-https://github.com/user/testing.git @ abc123def
+  # Testing specific commit
+  - url: https://github.com/user/testing.git
+    version: abc123def
 ```
 
 ### Upgrading Nodes
@@ -370,15 +386,14 @@ git describe --tags
 git fetch --tags
 git tag -l
 
-# 3. Update nodes.txt
-# Change: @ v1.0.5
-# To:     @ v1.0.6
+# 3. Update config.yml
+# Change version: v1.0.5 to version: v1.0.6
 
 # 4. Restart container
 docker compose restart
 ```
 
-**To upgrade `@latest` nodes:**
+**To upgrade `latest` nodes:**
 
 Just restart the container - it checks for newer tags automatically.
 
@@ -392,10 +407,10 @@ cd ComfyUI/custom_nodes/broken-node
 git log --oneline
 git tag -l
 
-# 2. Update nodes.txt to previous version
-# https://github.com/user/broken-node.git @ v1.0.4
+# 2. Update config.yml to previous version
+# Change to version: v1.0.4
 
-# 3. Restart with --force to reinstall
+# 3. Reinstall
 python install_nodes.py --force --comfyui-dir ./ComfyUI
 ```
 
@@ -403,12 +418,15 @@ python install_nodes.py --force --comfyui-dir ./ComfyUI
 
 **Using personal access tokens:**
 
-```
-# GitHub
-https://YOUR_TOKEN@github.com/user/private-repo.git @ latest
+```yaml
+nodes:
+  # GitHub
+  - url: https://YOUR_TOKEN@github.com/user/private-repo.git
+    version: latest
 
-# GitLab
-https://oauth2:YOUR_TOKEN@gitlab.com/user/private-repo.git @ latest
+  # GitLab
+  - url: https://oauth2:YOUR_TOKEN@gitlab.com/user/private-repo.git
+    version: latest
 ```
 
 **Using SSH (advanced):**
@@ -419,7 +437,7 @@ https://oauth2:YOUR_TOKEN@gitlab.com/user/private-repo.git @ latest
 
 ### Option 1: Bake Nodes into Image
 
-Uncomment nodes in `nodes.txt` and deploy:
+Add nodes to `config.yml` and deploy:
 ```bash
 ./deploy.sh ada
 ```
@@ -438,12 +456,15 @@ Nodes are installed during image build and baked in.
 
 ### Option 2: Install on First Run
 
-Leave `nodes.txt` mostly commented in image, create custom `nodes.txt` on RunPod volume:
+Create custom `config.yml` on RunPod volume:
 ```bash
 # On RunPod network volume
-cat > /runpod-volume/nodes.txt << EOF
-https://github.com/ltdrdata/ComfyUI-Manager.git @ latest
-https://github.com/kijai/ComfyUI-KJNodes.git @ latest
+cat > /runpod-volume/config.yml << EOF
+nodes:
+  - url: https://github.com/ltdrdata/ComfyUI-Manager.git
+    version: latest
+  - url: https://github.com/kijai/ComfyUI-KJNodes.git
+    version: latest
 EOF
 ```
 
@@ -458,116 +479,61 @@ EOF
 
 ## Best Practices
 
-1. **Production: Pin versions** - Use `@v1.2.3` for stability
-2. **Development: Use latest** - Use `@latest` or `@nightly` for features
-3. **Document your choices** - Add comments explaining why you pinned versions
+1. **Production: Pin versions** - Use specific versions for stability
+2. **Development: Use latest** - Use `latest` or `nightly` for features
+3. **Document your choices** - Add YAML comments explaining why you pinned versions
 4. **Test locally first** - Run `--dry-run` before deploying
-5. **Group by purpose** - Organize nodes.txt with comment sections
-6. **Version control nodes.txt** - Track changes in git
+5. **Group by purpose** - Organize config.yml with comments
+6. **Version control config.yml** - Track changes in git
 7. **Start minimal** - Only install nodes you actually use
 8. **Review dependencies** - Check what each node installs
 
-## Example Workflows
+## Example config.yml with Comments
 
-### Clean Setup
+```yaml
+# Custom Nodes Configuration
 
-```bash
-# 1. Edit nodes.txt
-nano nodes.txt
+nodes:
+  # ============================================================================
+  # Essential QoL Pack
+  # ============================================================================
 
-# 2. Uncomment nodes you need
-https://github.com/ltdrdata/ComfyUI-Manager.git @ latest
-https://github.com/kijai/ComfyUI-KJNodes.git @ latest
+  - url: https://github.com/ltdrdata/ComfyUI-Manager.git
+    version: latest  # Package manager for ComfyUI
 
-# 3. Start
-docker compose up
+  - url: https://github.com/kijai/ComfyUI-KJNodes.git
+    version: latest  # Utility nodes
+
+  # ============================================================================
+  # Image Generation Pack
+  # ============================================================================
+
+  - url: https://github.com/cubiq/ComfyUI_IPAdapter_plus.git
+    version: latest  # IP Adapter nodes
+
+  - url: https://github.com/Fannovel16/comfyui_controlnet_aux.git
+    version: latest  # ControlNet preprocessors
+
+  # ============================================================================
+  # Video Generation Pack
+  # ============================================================================
+
+  - url: https://github.com/Kosinkadink/ComfyUI-AnimateDiff-Evolved.git
+    version: latest  # AnimateDiff nodes
+
+  - url: https://github.com/Kosinkadink/ComfyUI-VideoHelperSuite.git
+    version: latest  # Video utilities
 ```
-
-### Update All Nodes
-
-```bash
-# For @latest nodes: Just restart
-docker compose restart
-
-# For pinned versions: Update nodes.txt then restart
-nano nodes.txt  # Change v1.0.5 -> v1.0.6
-docker compose restart
-```
-
-### Testing New Node
-
-```bash
-# 1. Add to nodes.txt
-echo "https://github.com/user/new-node.git @ nightly" >> nodes.txt
-
-# 2. Install without rebuilding
-python install_nodes.py --comfyui-dir ./ComfyUI
-
-# 3. Test in ComfyUI
-# ...
-
-# 4. If good, commit nodes.txt
-git add nodes.txt
-git commit -m "Add new-node for testing"
-```
-
-## Common Node Collections
-
-### Essential QoL Pack
-```
-https://github.com/ltdrdata/ComfyUI-Manager.git @ latest
-https://github.com/kijai/ComfyUI-KJNodes.git @ latest
-https://github.com/ltdrdata/ComfyUI-Impact-Pack.git @ latest
-```
-
-### Image Generation Pack
-```
-https://github.com/cubiq/ComfyUI_IPAdapter_plus.git @ latest
-https://github.com/Fannovel16/comfyui_controlnet_aux.git @ latest
-https://github.com/ltdrdata/ComfyUI-Impact-Pack.git @ latest
-```
-
-### Video Generation Pack
-```
-https://github.com/Kosinkadink/ComfyUI-AnimateDiff-Evolved.git @ latest
-https://github.com/Kosinkadink/ComfyUI-VideoHelperSuite.git @ latest
-https://github.com/Kosinkadink/ComfyUI-Advanced-ControlNet.git @ latest
-```
-
-### FLUX Pack
-```
-https://github.com/black-forest-labs/ComfyUI-Flux.git @ latest
-https://github.com/city96/ComfyUI-GGUF.git @ latest
-https://github.com/kijai/ComfyUI-Florence2.git @ latest
-```
-
-## Performance Notes
-
-### Installation Times (approximate)
-
-| Node | Size | Time | Dependencies |
-|------|------|------|--------------|
-| ComfyUI-Manager | ~5MB | 10-20s | Minimal |
-| KJNodes | ~10MB | 20-40s | NumPy, CV2 |
-| Impact-Pack | ~50MB | 1-2min | Many |
-| VideoHelperSuite | ~20MB | 30-60s | FFmpeg deps |
-
-### Tips for Faster Installation
-
-1. **Install in parallel** (already done automatically)
-2. **Use --skip-deps** during testing
-3. **Cache Docker layers** - nodes install once per build
-4. **Pre-download frequently used nodes** - bake into image
 
 ## Summary
 
 The custom nodes management system provides:
 
-- ✅ **Declarative configuration** - `nodes.txt` is your source of truth
+- ✅ **Declarative configuration** - `config.yml` is your source of truth
 - ✅ **Version control** - Pin to specific versions or track latest
 - ✅ **Automatic installation** - Nodes install on container start
 - ✅ **Git-based** - Proper version control, not buggy snapshots
 - ✅ **Flexible** - Mix latest, nightly, and pinned versions
 - ✅ **Reproducible** - Same nodes, same versions, every time
 
-Edit `nodes.txt`, uncomment what you need, and let the system handle the rest!
+Edit `config.yml`, define your nodes, and let the system handle the rest!
