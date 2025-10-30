@@ -4,7 +4,7 @@
 set -e
 
 # Configuration
-DOCKER_USERNAME="alongbottom"
+DOCKER_USERNAME="artokun"
 IMAGE_NAME="comfyui-runpod"
 
 # Color output

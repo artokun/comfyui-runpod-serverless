@@ -37,7 +37,7 @@ This builds `Dockerfile.production` which contains only the handler, not ComfyUI
 
 # Or manually:
 docker login
-docker push alongbottom/comfyui-runpod:ada
+docker push artokun/comfyui-runpod:ada
 ```
 
 ## Step 3: Configure RunPod Endpoint
@@ -50,7 +50,7 @@ docker push alongbottom/comfyui-runpod:ada
 
 **Container Configuration:**
 ```
-Image: alongbottom/comfyui-runpod:ada
+Image: artokun/comfyui-runpod:ada
 ```
 
 **GPU Selection:**
@@ -156,7 +156,7 @@ docker build \
   --platform linux/amd64 \
   --build-arg GPU_ARCH=$ARCH \
   -f Dockerfile.production \
-  -t alongbottom/comfyui-runpod:$ARCH \
+  -t artokun/comfyui-runpod:$ARCH \
   .
 ```
 
@@ -172,9 +172,9 @@ ARCH=${1:-ada}
 ./build.sh $ARCH
 
 # Push
-docker push alongbottom/comfyui-runpod:$ARCH
+docker push artokun/comfyui-runpod:$ARCH
 
-echo "Deployed: alongbottom/comfyui-runpod:$ARCH"
+echo "Deployed: artokun/comfyui-runpod:$ARCH"
 echo "Use this in RunPod console"
 ```
 
@@ -191,13 +191,13 @@ See [RUNPOD_CONFIG.md](RUNPOD_CONFIG.md) for detailed configuration templates ba
 ### Ada (RTX 4090)
 - **CUDA**: 11.8
 - **PyTorch**: 2.1.0+cu118
-- **Image**: `alongbottom/comfyui-runpod:ada`
+- **Image**: `artokun/comfyui-runpod:ada`
 - **RunPod GPUs**: RTX 4090, RTX 4000 Ada, L40, L40S, A6000
 
 ### Blackwell (RTX 5090/6000 Pro)
 - **CUDA**: 12.4
 - **PyTorch**: 2.5.0+cu124
-- **Image**: `alongbottom/comfyui-runpod:blackwell`
+- **Image**: `artokun/comfyui-runpod:blackwell`
 - **RunPod GPUs**: RTX 5090, RTX 6000 Pro (when available)
 - **Performance**: 40-60% faster than Ada
 

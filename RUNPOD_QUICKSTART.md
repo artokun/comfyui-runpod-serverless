@@ -32,7 +32,7 @@ That's it! No Docker Hub account or manual builds needed.
 
 ```
 Name: ComfyUI Handler - Ada (RTX 4090)
-Container Image: alongbottom/comfyui-runpod:ada
+Container Image: artokun/comfyui-runpod:ada
 Container Disk: 20 GB
 
 Environment Variables:
@@ -41,7 +41,7 @@ Environment Variables:
   AUTO_UPDATE=false
 ```
 
-For **RTX 5090/6000 Pro**, use `alongbottom/comfyui-runpod:blackwell`
+For **RTX 5090/6000 Pro**, use `artokun/comfyui-runpod:blackwell`
 
 4. Click **"Save Template"**
 
@@ -191,7 +191,7 @@ See [Model Management](docs/MODEL_MANAGEMENT.md) and [Custom Nodes](docs/CUSTOM_
 ### Ada (RTX 4090) - Default
 
 ```
-Container Image: alongbottom/comfyui-runpod:ada
+Container Image: artokun/comfyui-runpod:ada
 GPU: RTX 4090
 ```
 
@@ -203,7 +203,7 @@ GPU: RTX 4090
 ### Blackwell (RTX 5090/6000 Pro) - Premium
 
 ```
-Container Image: alongbottom/comfyui-runpod:blackwell
+Container Image: artokun/comfyui-runpod:blackwell
 GPU: RTX 5090 or RTX 6000 Pro
 ```
 
@@ -286,10 +286,10 @@ Or pre-install on network volume (see docs/RUNPOD_DEPLOYMENT.md)
 
 ## Support
 
-- **GitHub Issues:** https://github.com/alongbottom/comfyui-runpod-handler/issues
+- **GitHub Issues:** https://github.com/artokun/comfyui-runpod-handler/issues
 - **RunPod Discord:** https://discord.gg/runpod
 - **ComfyUI Discord:** https://discord.gg/comfyui
 
 ---
 
-**Ready to deploy?** Just create a template with `alongbottom/comfyui-runpod:ada` and you're done! 🚀
+**Ready to deploy?** Just create a template with `artokun/comfyui-runpod:ada` and you're done! 🚀

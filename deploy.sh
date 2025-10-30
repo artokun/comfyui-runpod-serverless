@@ -11,7 +11,7 @@ RED='\033[0;31m'
 NC='\033[0m' # No Color
 
 GPU_ARCH=${1:-blackwell}
-DOCKER_USERNAME=${DOCKER_USERNAME:-alongbottom}
+DOCKER_USERNAME=${DOCKER_USERNAME:-artokun}
 IMAGE_NAME="$DOCKER_USERNAME/comfyui-runpod"
 TAG="$GPU_ARCH"
 

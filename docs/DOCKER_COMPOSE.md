@@ -309,7 +309,7 @@ curl -X POST http://localhost:8000/runsync \
 # Deploy
 ./deploy.sh ada  # or deploy.ps1 on Windows
 
-# Use in RunPod: alongbottom/comfyui-runpod:ada
+# Use in RunPod: artokun/comfyui-runpod:ada
 ```
 
 ## Advanced Usage

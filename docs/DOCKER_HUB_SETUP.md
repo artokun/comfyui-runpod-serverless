@@ -63,7 +63,7 @@ Open `build.sh` and change line 7:
 
 ```bash
 # Current (official repo)
-DOCKER_USERNAME="alongbottom"
+DOCKER_USERNAME="artokun"
 
 # Change to your username if you forked
 DOCKER_USERNAME="yourusername"
@@ -77,7 +77,7 @@ DOCKER_USERNAME="johnsmith"
 IMAGE_NAME="comfyui-runpod"
 ```
 
-**Leave as `alongbottom` if you're just contributing code to this repo!**
+**Leave as `artokun` if you're just contributing code to this repo!**
 
 ## Step 5: Test Build and Push
 

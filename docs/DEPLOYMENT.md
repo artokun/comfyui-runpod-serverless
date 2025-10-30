@@ -8,7 +8,7 @@ Most users should use the **official pre-built images** that auto-deploy on ever
 
 **Quick Start:**
 1. Go to https://runpod.io/console/serverless
-2. Create new template with image: `alongbottom/comfyui-runpod:ada`
+2. Create new template with image: `artokun/comfyui-runpod:ada`
 3. Configure and deploy
 
 See [RUNPOD_DEPLOYMENT.md](RUNPOD_DEPLOYMENT.md) for complete RunPod setup guide.
@@ -48,11 +48,11 @@ Or set up GitHub Actions with your own Docker Hub secrets.
 Pre-built images available on Docker Hub:
 
 **Latest (recommended):**
-- `alongbottom/comfyui-runpod:ada` - RTX 4090
-- `alongbottom/comfyui-runpod:blackwell` - RTX 5090/6000 Pro
+- `artokun/comfyui-runpod:ada` - RTX 4090
+- `artokun/comfyui-runpod:blackwell` - RTX 5090/6000 Pro
 
 **Versioned (pinnable):**
-- `alongbottom/comfyui-runpod:v1.2.3-ada`
-- `alongbottom/comfyui-runpod:v1.2.3-blackwell`
+- `artokun/comfyui-runpod:v1.2.3-ada`
+- `artokun/comfyui-runpod:v1.2.3-blackwell`
 
-See [Releases](https://github.com/alongbottom/comfyui-runpod-handler/releases) for version history.
+See [Releases](https://github.com/artokun/comfyui-runpod-handler/releases) for version history.

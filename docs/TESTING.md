@@ -241,7 +241,7 @@ print(f"Estimated RunPod cost: ${duration * GPU_COST_PER_SECOND:.4f}")
 
 Once local testing works perfectly:
 
-1. Push updated Docker image: `docker push alongbottom/comfyui-runpod:latest`
+1. Push updated Docker image: `docker push artokun/comfyui-runpod:latest`
 2. Upload models to RunPod network volume
 3. Deploy/update your RunPod endpoint
 4. Test remote endpoint with Postman

@@ -8,7 +8,7 @@ Complete guide for optimizing your ComfyUI serverless endpoint on RunPod.
 **Use Case**: Constant traffic, minimal cold starts acceptable
 
 ```
-Container Image: alongbottom/comfyui-runpod:latest
+Container Image: artokun/comfyui-runpod:latest
 GPU Type: 48GB (L40S, A6000) + 24GB (A5000, RTX A5000) fallbacks
 Container Disk: 30GB
 Network Volume: Attach your models volume
@@ -30,7 +30,7 @@ Estimated Cost: ~$20-40/day for active workers
 **Use Case**: Intermittent traffic, balance cost vs. latency
 
 ```
-Container Image: alongbottom/comfyui-runpod:latest
+Container Image: artokun/comfyui-runpod:latest
 GPU Type: 24GB (A5000, RTX A5000) + 48GB fallback
 Container Disk: 30GB
 Network Volume: Attach your models volume
@@ -55,7 +55,7 @@ Estimated Cost: Pay-per-use (~$0.0003/sec active time)
 **Use Case**: Development, testing, low traffic
 
 ```
-Container Image: alongbottom/comfyui-runpod:latest
+Container Image: artokun/comfyui-runpod:latest
 GPU Type: 16GB (RTX 4090, A4000)
 Container Disk: 20GB
 Network Volume: Optional (can use smaller test volume)

@@ -78,13 +78,13 @@ mypy .
 
 **Important:** Contributors do NOT need to build or push Docker images.
 
-- **Official images** are published to `alongbottom/comfyui-runpod` by the maintainer
+- **Official images** are published to `artokun/comfyui-runpod` by the maintainer
 - **Contributors** only need to test locally with `docker compose up`
 - **No Docker Hub login required** for contributing code
 
 If you want to deploy your own version:
 1. **Fork this repository**
-2. Edit `build.sh` and change `DOCKER_USERNAME="alongbottom"` to your username
+2. Edit `build.sh` and change `DOCKER_USERNAME="artokun"` to your username
 3. Login to Docker Hub: `docker login`
 4. Deploy: `./deploy.sh ada`
 
@@ -368,7 +368,7 @@ python -m cProfile -o profile.stats handler.py
 ./build.sh --arch blackwell
 
 # Test both builds
-docker run --rm --gpus all alongbottom/comfyui-runpod:ada python3 --version
+docker run --rm --gpus all artokun/comfyui-runpod:ada python3 --version
 ```
 
 ## Questions?

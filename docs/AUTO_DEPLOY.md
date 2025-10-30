@@ -36,11 +36,11 @@ git commit -m "feat!: redesign API"           # → x.0.0 (major bump)
 2. GitHub Actions triggers
 3. Version calculated (e.g., v1.2.3)
 4. Docker images built:
-   - `alongbottom/comfyui-runpod:v1.2.3-ada`
-   - `alongbottom/comfyui-runpod:v1.2.3-blackwell`
+   - `artokun/comfyui-runpod:v1.2.3-ada`
+   - `artokun/comfyui-runpod:v1.2.3-blackwell`
 5. Architecture tags updated:
-   - `alongbottom/comfyui-runpod:ada` → latest
-   - `alongbottom/comfyui-runpod:blackwell` → latest
+   - `artokun/comfyui-runpod:ada` → latest
+   - `artokun/comfyui-runpod:blackwell` → latest
 6. GitHub release created with changelog
 7. Done! 🚀
 
@@ -63,7 +63,7 @@ Add two secrets:
 
 | Secret | Value |
 |--------|-------|
-| `DOCKER_USERNAME` | `alongbottom` |
+| `DOCKER_USERNAME` | `artokun` |
 | `DOCKER_TOKEN` | [your access token] |
 
 ### 3. Test It
@@ -90,19 +90,19 @@ Following [SemVer](https://semver.org/): `MAJOR.MINOR.PATCH`
 For each release (e.g., v1.2.3), creates:
 
 **Versioned tags (pinnable):**
-- `alongbottom/comfyui-runpod:v1.2.3-ada`
-- `alongbottom/comfyui-runpod:v1.2.3-blackwell`
+- `artokun/comfyui-runpod:v1.2.3-ada`
+- `artokun/comfyui-runpod:v1.2.3-blackwell`
 
 **Architecture tags (latest):**
-- `alongbottom/comfyui-runpod:ada`
-- `alongbottom/comfyui-runpod:blackwell`
+- `artokun/comfyui-runpod:ada`
+- `artokun/comfyui-runpod:blackwell`
 
 ## RunPod Usage
 
 ### Recommended: Use Latest
 
 ```
-Container Image: alongbottom/comfyui-runpod:ada
+Container Image: artokun/comfyui-runpod:ada
 ```
 
 Always gets the latest stable version automatically.
@@ -110,7 +110,7 @@ Always gets the latest stable version automatically.
 ### Optional: Pin Version
 
 ```
-Container Image: alongbottom/comfyui-runpod:v1.2.3-ada
+Container Image: artokun/comfyui-runpod:v1.2.3-ada
 ```
 
 Stays on specific version until manually updated.
@@ -240,7 +240,7 @@ See:
 
 ### Docker Hub
 
-Go to: https://hub.docker.com/r/alongbottom/comfyui-runpod
+Go to: https://hub.docker.com/r/artokun/comfyui-runpod
 
 See:
 - All image tags
@@ -254,7 +254,7 @@ If GitHub Actions is down or you need manual control:
 
 ```bash
 # Login to Docker Hub
-docker login -u alongbottom
+docker login -u artokun
 
 # Build and deploy
 ./deploy.sh ada
