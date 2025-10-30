@@ -1,0 +1,68 @@
+# ComfyUI Model Downloads
+# Format: <url> -> <destination_directory>
+#
+# Supported destinations:
+#   checkpoints, clip, clip_vision, configs, controlnet, diffusion_models,
+#   embeddings, loras, upscale_models, vae, sams, detection, text_encoders
+#
+# Supported URL types:
+#   - Direct URLs (must end in model file extension)
+#   - HuggingFace URLs (huggingface.co/...)
+#   - Civitai URLs (civitai.com/api/download/models/...)
+#
+# Lines starting with # are comments
+# Empty lines are ignored
+# Use /skip or /optional flags to mark models as skippable
+#
+# Examples:
+#   https://huggingface.co/stabilityai/sdxl-vae/resolve/main/sdxl_vae.safetensors -> vae
+#   https://civitai.com/api/download/models/130072 -> checkpoints  # Realistic Vision v5.1
+#   https://example.com/model.safetensors -> loras /optional
+#
+# ============================================================================
+# Default Models (commented out - uncomment what you need)
+# ============================================================================
+
+# SDXL VAE
+# https://huggingface.co/stabilityai/sdxl-vae/resolve/main/sdxl_vae.safetensors -> vae
+
+# SDXL Base Model
+# https://huggingface.co/stabilityai/stable-diffusion-xl-base-1.0/resolve/main/sd_xl_base_1.0.safetensors -> checkpoints
+
+# SD 1.5 Model
+# https://huggingface.co/runwayml/stable-diffusion-v1-5/resolve/main/v1-5-pruned-emaonly.safetensors -> checkpoints
+
+# ============================================================================
+# WAN Animate 2.2 Models (example from the batch script)
+# ============================================================================
+
+# Clip Vision
+https://huggingface.co/Aitrepreneur/FLX/resolve/main/clip_vision_h.safetensors -> clip_vision
+
+# Detection Models
+https://huggingface.co/Aitrepreneur/FLX/resolve/main/vitpose_h_wholebody_data.bin -> detection
+https://huggingface.co/Aitrepreneur/FLX/resolve/main/vitpose_h_wholebody_model.onnx -> detection
+https://huggingface.co/Aitrepreneur/FLX/resolve/main/vitpose-l-wholebody.onnx -> detection
+https://huggingface.co/Aitrepreneur/FLX/resolve/main/yolov10m.onnx -> detection
+
+# Diffusion Model
+https://huggingface.co/Aitrepreneur/FLX/resolve/main/Wan2_2-Animate-14B_fp8_scaled_e4m3fn_KJ_v2.safetensors -> diffusion_models
+
+# LoRAs
+https://huggingface.co/Aitrepreneur/FLX/resolve/main/lightx2v_I2V_14B_480p_cfg_step_distill_rank64_bf16.safetensors -> loras
+https://huggingface.co/Aitrepreneur/FLX/resolve/main/WanAnimate_relight_lora_fp16.safetensors -> loras
+
+# SAMs
+https://huggingface.co/Aitrepreneur/FLX/resolve/main/SeC-4B-fp16.safetensors -> sams
+
+# Text Encoders
+https://huggingface.co/Aitrepreneur/FLX/resolve/main/umt5-xxl-enc-bf16.safetensors -> text_encoders
+
+# VAE
+https://huggingface.co/Aitrepreneur/FLX/resolve/main/Wan2_1_VAE_bf16.safetensors -> vae
+
+# ============================================================================
+# Add your custom models below
+# ============================================================================
+
+# Your models here...

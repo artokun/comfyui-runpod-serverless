@@ -1,0 +1,39 @@
+services:
+  # ComfyUI + Handler with auto-install/update
+  # ComfyUI is auto-cloned to ./ComfyUI on first run (updateable, persistent)
+  comfyui:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        GPU_ARCH: ${GPU_ARCH:-ada}
+    image: comfyui:${GPU_ARCH:-ada}
+    container_name: comfyui
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - GPU_ARCH=${GPU_ARCH:-ada}
+      - COMFYUI_PATH=/comfyui
+      - AUTO_UPDATE=${AUTO_UPDATE:-false}  # Set to 'true' for auto-updates on startup
+    ports:
+      - "8188:8188"  # ComfyUI web interface
+      - "8000:8000"  # RunPod API handler
+    volumes:
+      # Mount ComfyUI from filesystem (auto-created if missing)
+      - ${COMFYUI_PATH:-./ComfyUI}:/comfyui
+      # Output directory
+      - ./output:/comfyui/output
+      # Workflows directory
+      - ./workflows:/comfyui/user/default/workflows
+      # Optional: Mount your models directory
+      # Uncomment and set MODELS_PATH in .env
+      # - ${MODELS_PATH}:/comfyui/models
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    restart: unless-stopped
+    stdin_open: true
+    tty: true

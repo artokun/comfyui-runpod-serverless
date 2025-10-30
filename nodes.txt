@@ -1,0 +1,95 @@
+# ComfyUI Custom Nodes Installation
+# Format: <git_url> @ <version>
+#
+# Version Specifiers:
+#   @latest    - Latest stable release (git tag)
+#   @nightly   - Latest commit on default branch
+#   @v1.2.3    - Specific version tag (semver)
+#   @commit123 - Specific commit hash
+#   @branch    - Specific branch name
+#
+# Lines starting with # are comments
+# Empty lines are ignored
+#
+# Examples:
+#   https://github.com/ltdrdata/ComfyUI-Manager.git @ latest
+#   https://github.com/kijai/ComfyUI-KJNodes.git @ v1.0.5
+#   https://github.com/cubiq/ComfyUI_IPAdapter_plus.git @ nightly
+#   https://github.com/user/custom-node.git @ main
+#   https://github.com/user/custom-node.git @ abc123def
+#
+# ============================================================================
+# Essential Nodes (Recommended)
+# ============================================================================
+
+# ComfyUI Manager - Package manager for custom nodes
+https://github.com/ltdrdata/ComfyUI-Manager.git @ latest
+
+# ============================================================================
+# Popular Custom Nodes (commented out - uncomment what you need)
+# ============================================================================
+
+# KJNodes - Utility nodes, masks, and more
+https://github.com/kijai/ComfyUI-KJNodes.git @ latest
+
+# IP Adapter Plus - Advanced image prompting
+https://github.com/cubiq/ComfyUI_IPAdapter_plus.git @ latest
+
+# ControlNet Auxiliary Preprocessors
+https://github.com/Fannovel16/comfyui_controlnet_aux.git @ latest
+
+# AnimateDiff Evolved - Video generation
+https://github.com/Kosinkadink/ComfyUI-AnimateDiff-Evolved.git @ latest
+
+# Video Helper Suite - Video I/O and processing
+https://github.com/Kosinkadink/ComfyUI-VideoHelperSuite.git @ latest
+
+# Advanced ControlNet
+https://github.com/Kosinkadink/ComfyUI-Advanced-ControlNet.git @ latest
+
+# Impact Pack - QoL improvements
+https://github.com/ltdrdata/ComfyUI-Impact-Pack.git @ latest
+
+# Inspire Pack - More QoL improvements
+https://github.com/ltdrdata/ComfyUI-Inspire-Pack.git @ latest
+
+# ============================================================================
+# WAN Animate Nodes (for WAN Animate 2.2 workflows)
+# ============================================================================
+
+# WAN Video Wrapper
+https://github.com/kijai/ComfyUI-WanVideoWrapper.git @ latest
+
+# WAN Animate Preprocess
+https://github.com/kijai/ComfyUI-WanAnimatePreprocess.git @ latest
+
+# Segment Anything 2
+https://github.com/kijai/ComfyUI-segment-anything-2.git @ latest
+
+# rgthree's nodes
+https://github.com/rgthree/rgthree-comfy.git @ latest
+
+# SecNodes
+https://github.com/9nate-drake/Comfyui-SecNodes.git @ latest
+
+# ============================================================================
+# Specialized Nodes
+# ============================================================================
+
+# ComfyUI-GGUF - GGUF format support
+https://github.com/city96/ComfyUI-GGUF.git @ latest
+
+# ComfyUI-ELLA - Enhanced language understanding
+https://github.com/ExponentialML/ComfyUI-ELLA.git @ latest
+
+# ComfyUI-Florence2 - Microsoft Florence-2 vision model
+https://github.com/kijai/ComfyUI-Florence2.git @ latest
+
+# ComfyUI-Flux - Flux model support
+https://github.com/black-forest-labs/ComfyUI-Flux.git @ latest
+
+# ============================================================================
+# Add your custom nodes below
+# ============================================================================
+
+# Your nodes here...
