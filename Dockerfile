@@ -20,14 +20,16 @@ ENV CUDA_TAG=cu118
 ENV TORCH_VERSION=2.1.0
 ENV TORCHVISION_VERSION=0.16.0
 ENV TORCHAUDIO_VERSION=2.1.0
+ENV TORCH_INDEX_URL=https://download.pytorch.org/whl/cu118
 ENV GPU_ARCH=ada
 
 FROM nvidia/cuda:12.4.1-cudnn-runtime-ubuntu22.04 AS base-blackwell
 ENV CUDA_VERSION=12.4
 ENV CUDA_TAG=cu124
-ENV TORCH_VERSION=2.5.0
-ENV TORCHVISION_VERSION=0.20.0
-ENV TORCHAUDIO_VERSION=2.5.0
+ENV TORCH_VERSION=nightly
+ENV TORCHVISION_VERSION=nightly
+ENV TORCHAUDIO_VERSION=nightly
+ENV TORCH_INDEX_URL=https://download.pytorch.org/whl/nightly/cu124
 ENV GPU_ARCH=blackwell
 
 FROM base-${GPU_ARCH} AS selected-base
@@ -63,13 +65,22 @@ RUN update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.10 1
 # Upgrade pip
 RUN python3 -m pip install --upgrade pip setuptools wheel
 
-# Install PyTorch stack
-RUN pip3 install --no-cache-dir \
-    --index-url https://download.pytorch.org/whl/${CUDA_TAG} \
-    --extra-index-url https://pypi.org/simple \
-    torch==${TORCH_VERSION}+${CUDA_TAG} \
-    torchvision==${TORCHVISION_VERSION}+${CUDA_TAG} \
-    torchaudio==${TORCHAUDIO_VERSION}+${CUDA_TAG}
+# Install PyTorch stack (stable for Ada, nightly for Blackwell with RTX 5090 support)
+RUN if [ "${TORCH_VERSION}" = "nightly" ]; then \
+        echo "Installing PyTorch nightly with RTX 5090/Blackwell support..."; \
+        pip3 install --no-cache-dir \
+            --index-url ${TORCH_INDEX_URL} \
+            --extra-index-url https://pypi.org/simple \
+            torch torchvision torchaudio; \
+    else \
+        echo "Installing PyTorch stable ${TORCH_VERSION}..."; \
+        pip3 install --no-cache-dir \
+            --index-url ${TORCH_INDEX_URL} \
+            --extra-index-url https://pypi.org/simple \
+            torch==${TORCH_VERSION}+${CUDA_TAG} \
+            torchvision==${TORCHVISION_VERSION}+${CUDA_TAG} \
+            torchaudio==${TORCHAUDIO_VERSION}+${CUDA_TAG}; \
+    fi
 
 # Fetch and install ComfyUI's requirements.txt from GitHub
 RUN wget -O /tmp/comfyui-requirements.txt \
@@ -78,10 +89,14 @@ RUN wget -O /tmp/comfyui-requirements.txt \
     rm /tmp/comfyui-requirements.txt
 
 # Install additional dependencies (xformers, performance optimizations)
-RUN pip3 install --no-cache-dir \
-    xformers==0.0.28.post1 \
-    transformers \
-    accelerate
+# For nightly builds, skip xformers version pin to avoid compatibility issues
+RUN if [ "${TORCH_VERSION}" = "nightly" ]; then \
+        echo "Installing xformers (latest compatible with nightly PyTorch)..."; \
+        pip3 install --no-cache-dir xformers transformers accelerate || \
+        (echo "xformers install failed, continuing without it..." && pip3 install --no-cache-dir transformers accelerate); \
+    else \
+        pip3 install --no-cache-dir xformers==0.0.28.post1 transformers accelerate; \
+    fi
 
 # Install Triton for Linux (already built-in for CUDA-enabled PyTorch on Linux)
 # Note: triton-windows is Windows-only, Linux uses triton from PyTorch

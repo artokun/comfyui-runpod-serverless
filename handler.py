@@ -9,6 +9,7 @@ from pathlib import Path
 import base64
 import re
 import tempfile
+import subprocess
 
 # Import S3 upload functionality
 try:
@@ -865,7 +866,81 @@ def handler(event: Dict[str, Any]) -> Dict[str, Any]:
         }
 
 
+def ensure_comfyui_ready():
+    """
+    Ensure ComfyUI is installed and ready before starting the handler.
+
+    This function checks if ComfyUI exists on the volume and if setup is needed.
+    If ComfyUI doesn't exist, it runs the setup script to install it.
+    """
+    # Get ComfyUI path from environment or use default
+    comfyui_path = os.getenv("COMFYUI_PATH", "/runpod-volume/ComfyUI")
+
+    # Check if ComfyUI exists
+    comfyui_exists = os.path.exists(os.path.join(comfyui_path, "main.py"))
+
+    if not comfyui_exists:
+        print(f"ComfyUI not found at {comfyui_path}, running initial setup...")
+        # Call start.sh to set up ComfyUI
+        try:
+            result = subprocess.run(["/app/start.sh"], check=True, capture_output=True, text=True)
+            print("Setup complete!")
+            print(result.stdout)
+            if result.stderr:
+                print("Setup warnings/errors:", result.stderr)
+        except subprocess.CalledProcessError as e:
+            print(f"Setup failed: {e}")
+            print("stdout:", e.stdout)
+            print("stderr:", e.stderr)
+            # Don't exit - handler might still work if ComfyUI was partially set up
+    else:
+        print(f"✓ ComfyUI found at {comfyui_path}")
+
+        # Still need to start ComfyUI server even if it exists
+        # Check if ComfyUI is already running
+        try:
+            response = requests.get(f"{COMFY_API_URL}/system_stats", timeout=2)
+            if response.status_code == 200:
+                print("✓ ComfyUI server is already running")
+                return
+        except:
+            pass
+
+        # Start ComfyUI in background
+        print("Starting ComfyUI server...")
+        try:
+            subprocess.Popen(
+                ["python3", "main.py", "--listen", "0.0.0.0", "--port", "8188"],
+                cwd=comfyui_path,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL
+            )
+
+            # Wait for ComfyUI to be ready
+            print("Waiting for ComfyUI to start...")
+            max_attempts = 30
+            for attempt in range(1, max_attempts + 1):
+                try:
+                    response = requests.get(f"{COMFY_API_URL}/system_stats", timeout=2)
+                    if response.status_code == 200:
+                        print(f"✓ ComfyUI server started successfully (attempt {attempt})")
+                        return
+                except:
+                    pass
+
+                if attempt < max_attempts:
+                    time.sleep(2)
+
+            print(f"⚠ ComfyUI did not respond after {max_attempts} attempts, continuing anyway...")
+
+        except Exception as e:
+            print(f"Error starting ComfyUI: {e}")
+
+
 if __name__ == "__main__":
+    # Ensure ComfyUI is ready before starting the handler
+    ensure_comfyui_ready()
+
     runpod.serverless.start({
         "handler": handler,
         "health_check": health_check

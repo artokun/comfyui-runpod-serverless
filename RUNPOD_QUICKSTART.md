@@ -35,30 +35,36 @@ Name: ComfyUI Handler - Ada (RTX 4090)
 Container Image: artokun/comfyui-runpod:ada
 Container Disk: 20 GB
 
-Environment Variables:
-  COMFY_API_URL=http://127.0.0.1:8188
-  COMFYUI_PATH=/runpod-volume/ComfyUI
-  AUTO_UPDATE=false
+Environment Variables (Optional - defaults are set):
+  # All have sensible defaults, only add if customizing:
+  # COMFY_API_URL=http://127.0.0.1:8188 (default)
+  # COMFYUI_PATH=/runpod-volume/ComfyUI (default)
+  # AUTO_UPDATE=false (default)
+
+Expose HTTP Ports (Optional):
+  Leave blank (for API-only deployment)
+  Or enter: 8188 (to access ComfyUI UI for debugging)
 ```
 
 For **RTX 5090/6000 Pro**, use `artokun/comfyui-runpod:blackwell`
 
 4. Click **"Save Template"**
 
-## Step 2: Create Network Volume (Optional but Recommended)
+## Step 2: Create Network Volume (Required)
 
 1. Go to **Storage** → **Network Volumes**
 2. Click **"New Network Volume"**
 3. Configure:
    - **Name:** `comfyui-volume`
    - **Region:** Choose region with RTX 4090/5090 availability
-   - **Size:** 50 GB minimum
+   - **Size:** 100 GB (recommended for models + ComfyUI)
 4. Click **"Create"**
 
-**Why use a volume?**
-- Persistent ComfyUI installation
-- Store models permanently
-- Faster startups
+**Why a volume is required:**
+- ComfyUI installs to `/runpod-volume/ComfyUI` (persistent)
+- Models stored permanently (no re-download between runs)
+- Custom nodes persist
+- Much faster cold starts after first run
 
 ## Step 3: Create Endpoint
 
@@ -125,32 +131,11 @@ response = requests.post(
 print(json.dumps(response.json(), indent=2))
 ```
 
-## Configuration Options
+## Customization
 
-### S3 Upload (Optional)
+### Custom Models/Nodes (Recommended - No Rebuild!)
 
-Add to template environment variables:
-
-```
-BUCKET_ENDPOINT_URL=https://s3.amazonaws.com
-BUCKET_ACCESS_KEY_ID=your-key
-BUCKET_SECRET_ACCESS_KEY=your-secret
-BUCKET_NAME=comfyui-outputs
-```
-
-### Auto-Update ComfyUI (Optional)
-
-Add to template environment variables:
-
-```
-AUTO_UPDATE=true
-```
-
-⚠️ Adds 10-30s to startup time
-
-### Custom Models/Nodes (No Rebuild Needed!)
-
-**Recommended Method: Environment Variable**
+**Easy Method: Use CONFIG_YML Environment Variable**
 
 Paste your `config.yml` content as `CONFIG_YML` environment variable in template settings. On startup, this writes to `/runpod-volume/config.yml` (persistent):
 
@@ -185,6 +170,25 @@ Next worker startup will use the edited config.
 3. 🥉 Baked-in default → Fallback if nothing else
 
 See [Model Management](docs/MODEL_MANAGEMENT.md) and [Custom Nodes](docs/CUSTOM_NODES.md) guides.
+
+### Optional Environment Variables
+
+Only add these if you need to customize default behavior:
+
+**S3 Upload (for direct S3 image upload):**
+```
+BUCKET_ENDPOINT_URL=https://s3.amazonaws.com
+BUCKET_ACCESS_KEY_ID=your-key
+BUCKET_SECRET_ACCESS_KEY=your-secret
+BUCKET_NAME=comfyui-outputs
+```
+
+**Auto-Update ComfyUI (not recommended - adds 10-30s startup time):**
+```
+AUTO_UPDATE=true
+```
+
+**All core settings have sensible defaults** - you typically don't need to set anything!
 
 ## GPU Options
 
@@ -240,6 +244,23 @@ Or pre-install on network volume (see docs/RUNPOD_DEPLOYMENT.md)
 - Use smaller batch sizes
 - Use quantized models (fp8)
 - Reduce resolution
+
+### Should I expose ports?
+
+**For serverless endpoints, typically no.**
+
+- **Production API deployment:** Leave "Expose HTTP Ports" blank
+  - RunPod automatically routes API requests to your handler (port 8000)
+  - ComfyUI runs internally on port 8188 (handler connects via localhost)
+  - No external port access needed
+
+- **Debugging with ComfyUI UI:** Enter `8188` in "Expose HTTP Ports"
+  - Access ComfyUI web interface at `https://{endpoint-id}-8188.proxy.runpod.net`
+  - Useful for designing workflows interactively
+  - Testing models and nodes
+  - **Note:** Exposes UI publicly (use with caution)
+
+**Recommendation:** Leave blank for production, only expose for development/debugging.
 
 ## Cost Estimation
 
