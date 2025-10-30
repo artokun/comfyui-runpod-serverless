@@ -42,6 +42,14 @@ except ImportError:
     TQDM_AVAILABLE = False
     tqdm = None
 
+try:
+    from huggingface_hub import hf_hub_download
+    import re
+    HF_HUB_AVAILABLE = True
+except ImportError:
+    HF_HUB_AVAILABLE = False
+    hf_hub_download = None
+
 
 # Valid model destination directories in ComfyUI
 VALID_DESTINATIONS = {
@@ -55,6 +63,34 @@ VALID_EXTENSIONS = {
     ".safetensors", ".ckpt", ".pt", ".pth", ".bin",
     ".onnx", ".pb", ".yaml", ".json",
 }
+
+
+def parse_huggingface_url(url: str) -> Optional[Tuple[str, str, str]]:
+    """
+    Parse HuggingFace URL to extract repo_id, revision, and filename.
+
+    Args:
+        url: HuggingFace URL like https://huggingface.co/Aitrepreneur/FLX/resolve/main/clip_vision_h.safetensors
+
+    Returns:
+        Tuple of (repo_id, revision, filename) or None if not a valid HF URL
+
+    Examples:
+        >>> parse_huggingface_url("https://huggingface.co/runwayml/stable-diffusion-v1-5/resolve/main/v1-5-pruned-emaonly.safetensors")
+        ('runwayml/stable-diffusion-v1-5', 'main', 'v1-5-pruned-emaonly.safetensors')
+    """
+    if not HF_HUB_AVAILABLE:
+        return None
+
+    # Pattern: https://huggingface.co/{user}/{repo}/resolve/{revision}/{filename}
+    pattern = r'https://huggingface\.co/([^/]+/[^/]+)/resolve/([^/]+)/(.+?)(?:\?.*)?$'
+    match = re.match(pattern, url)
+
+    if match:
+        repo_id, revision, filename = match.groups()
+        return repo_id, revision, filename
+
+    return None
 
 
 @dataclass
@@ -196,7 +232,43 @@ class ModelDownloader:
                 print(f"  Downloading: {entry.url}")
                 print(f"  To: {output_file}")
 
-            # Download with progress
+            # Try HuggingFace fast download first (uses hf_transfer for 3-5x speed)
+            hf_parsed = parse_huggingface_url(entry.url)
+            if hf_parsed and HF_HUB_AVAILABLE:
+                repo_id, revision, filename = hf_parsed
+                print(f"  Using HuggingFace Hub (hf_transfer enabled for fast download)")
+                print(f"  Repo: {repo_id}, File: {filename}")
+
+                # Download using hf_hub_download (automatic hf_transfer acceleration)
+                try:
+                    downloaded_path = hf_hub_download(
+                        repo_id=repo_id,
+                        revision=revision,
+                        filename=filename,
+                        cache_dir=None,  # Use default HF cache
+                        resume_download=True,
+                        local_dir=str(dest_dir),
+                        local_dir_use_symlinks=False  # Copy file, don't symlink
+                    )
+
+                    # Verify the file was downloaded to the expected location
+                    if Path(downloaded_path).exists():
+                        # If downloaded to a different location, move it
+                        if Path(downloaded_path) != output_file:
+                            import shutil
+                            shutil.move(downloaded_path, output_file)
+
+                        self.downloaded += 1
+                        file_size = output_file.stat().st_size / 1024 / 1024
+                        return True, f"Downloaded (HF): {output_file.name} ({file_size:.1f} MB)"
+                    else:
+                        raise FileNotFoundError(f"Downloaded file not found: {downloaded_path}")
+
+                except Exception as hf_error:
+                    # Fall back to urllib if HF download fails
+                    print(f"  HF download failed ({hf_error}), falling back to urllib...")
+
+            # Fallback: Standard urllib download (slower, single-threaded)
             if TQDM_AVAILABLE:
                 # Use tqdm for progress bar
                 with tqdm(

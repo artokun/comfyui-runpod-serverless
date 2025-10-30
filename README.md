@@ -112,6 +112,7 @@ docker compose restart
 **Key Features:**
 - ✅ **Edit anytime** - No Docker rebuild needed
 - ✅ **Smart caching** - Only downloads new/missing models
+- ✅ **Lightning fast downloads** - hf_transfer acceleration (100-200 MB/s on gigabit)
 - ✅ **Lightweight default** - Fast first build (4GB vs 30GB+)
 - ✅ **Advanced example** - Complete WAN Animate setup available
 

@@ -160,14 +160,10 @@ if [ -n "$CONFIG_FILE" ] && [ -f "/app/install_nodes.py" ]; then
         else
             echo "No custom nodes configured for installation (all commented out)"
         fi
-    else
-        echo "⚠ config.yml or install_nodes.py not found, skipping custom node installation"
-    fi
-    echo ""
 else
-    echo "No config.yml found, skipping custom node installation"
-    echo ""
+    echo "⚠ config.yml or install_nodes.py not found, skipping custom node installation"
 fi
+echo ""
 
 # Download models from config.yml
 echo "Checking for models to download..."
@@ -206,14 +202,10 @@ if [ -n "$CONFIG_FILE" ] && [ -f "/app/download_models.py" ]; then
         else
             echo "No models configured for download (all commented out)"
         fi
-    else
-        echo "⚠ download_models.py not found, skipping model downloads"
-    fi
-    echo ""
 else
-    echo "No config.yml found, skipping model downloads"
-    echo ""
+    echo "⚠ download_models.py not found, skipping model downloads"
 fi
+echo ""
 
 # Check GPU availability
 echo "Checking GPU..."
