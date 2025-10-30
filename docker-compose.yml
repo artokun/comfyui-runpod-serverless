@@ -28,6 +28,8 @@ services:
       - ./workflows:/comfyui/user/default/workflows
       # Configuration file (edit without rebuilding!)
       - ./config.yml:/comfyui/../config.yml
+      # Examples directory (test scripts and workflows)
+      - ./examples:/app/examples
       # Optional: Mount your models directory
       # Uncomment and set MODELS_PATH in .env
       # - ${MODELS_PATH}:/comfyui/models

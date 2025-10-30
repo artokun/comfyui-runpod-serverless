@@ -56,7 +56,7 @@ def test_workflow():
             ],
             "return_images": True,
             "timeout": 600,
-            "use_websocket": False  # Disable WebSocket for local testing
+            "use_websocket": True  # Now uses RunPod's reliable synchronous pattern
         }
     }
 

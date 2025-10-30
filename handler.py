@@ -6,7 +6,6 @@ import os
 from typing import Dict, Any, List, Optional, Set
 import uuid
 from pathlib import Path
-import threading
 import base64
 import re
 import tempfile
@@ -215,12 +214,13 @@ def process_input_images(images: List[Dict[str, Any]], errors: List[str]) -> Non
             errors.append(f"Image {idx} ({filename}): Unexpected error - {str(e)}")
 
 
-def queue_prompt(workflow: Dict[str, Any], comfyorg_api_key: Optional[str] = None) -> str:
+def queue_prompt(workflow: Dict[str, Any], client_id: str, comfyorg_api_key: Optional[str] = None) -> str:
     """
     Queue a prompt in ComfyUI and return the prompt ID.
 
     Args:
         workflow: The ComfyUI workflow to execute
+        client_id: Client ID for WebSocket tracking
         comfyorg_api_key: Optional Comfy.org API key for authentication with paid API nodes
 
     Returns:
@@ -228,7 +228,7 @@ def queue_prompt(workflow: Dict[str, Any], comfyorg_api_key: Optional[str] = Non
     """
     payload = {
         "prompt": workflow,
-        "client_id": str(uuid.uuid4())
+        "client_id": client_id
     }
 
     # Inject Comfy.org API key if provided
@@ -259,7 +259,7 @@ def get_history(prompt_id: str) -> Optional[Dict[str, Any]]:
     return history.get(prompt_id)
 
 
-def wait_for_completion(prompt_id: str, timeout: int = 600, poll_interval: int = 2, use_websocket: bool = True) -> Dict[str, Any]:
+def wait_for_completion(prompt_id: str, client_id: str, timeout: int = 600, poll_interval: int = 2, use_websocket: bool = True) -> Dict[str, Any]:
     """
     Wait for a prompt to complete and return the results.
 
@@ -268,6 +268,7 @@ def wait_for_completion(prompt_id: str, timeout: int = 600, poll_interval: int =
 
     Args:
         prompt_id: The prompt ID to wait for
+        client_id: Client ID for WebSocket tracking (must match queue_prompt client_id)
         timeout: Maximum time to wait in seconds
         poll_interval: How often to check for completion in seconds (polling mode)
         use_websocket: Whether to attempt WebSocket monitoring first (default: True)
@@ -278,7 +279,6 @@ def wait_for_completion(prompt_id: str, timeout: int = 600, poll_interval: int =
     # Try WebSocket first if enabled
     if use_websocket:
         print("Attempting WebSocket monitoring...")
-        client_id = str(uuid.uuid4())
         history = wait_for_completion_ws(prompt_id, client_id, timeout)
         if history:
             return history
@@ -571,6 +571,7 @@ def validate_workflow_models(workflow: Dict[str, Any]) -> Dict[str, Any]:
 def wait_for_completion_ws(prompt_id: str, client_id: str, timeout: int = 600) -> Optional[Dict[str, Any]]:
     """
     Wait for prompt completion using WebSocket for real-time updates.
+    Uses simple synchronous WebSocket pattern from RunPod's official worker.
     Falls back to None if WebSocket is unavailable or fails.
 
     Args:
@@ -584,94 +585,86 @@ def wait_for_completion_ws(prompt_id: str, client_id: str, timeout: int = 600) -
     try:
         import websocket
 
-        completion_event = threading.Event()
-        result_data = {"history": None, "error": None}
-
-        def on_message(ws, message):
-            try:
-                data = json.loads(message)
-                msg_type = data.get("type")
-
-                # Log progress updates
-                if msg_type == "progress":
-                    progress_data = data.get("data", {})
-                    value = progress_data.get("value", 0)
-                    max_value = progress_data.get("max", 0)
-                    if max_value > 0:
-                        percent = (value / max_value) * 100
-                        print(f"Progress: {percent:.1f}% ({value}/{max_value})")
-
-                # Check for execution completion
-                elif msg_type == "executing":
-                    executing_data = data.get("data", {})
-                    node = executing_data.get("node")
-
-                    # node is None when execution completes
-                    if node is None and executing_data.get("prompt_id") == prompt_id:
-                        print("Execution completed (WebSocket)")
-                        # Fetch final history
-                        history = get_history(prompt_id)
-                        result_data["history"] = history
-                        completion_event.set()
-                        ws.close()
-
-                # Check for execution errors
-                elif msg_type == "execution_error":
-                    error_data = data.get("data", {})
-                    if error_data.get("prompt_id") == prompt_id:
-                        result_data["error"] = f"Execution error: {error_data}"
-                        completion_event.set()
-                        ws.close()
-
-            except Exception as e:
-                print(f"Error processing WebSocket message: {e}")
-
-        def on_error(ws, error):
-            print(f"WebSocket error: {error}")
-            result_data["error"] = str(error)
-            completion_event.set()
-
-        def on_close(ws, close_status_code, close_msg):
-            print(f"WebSocket closed: {close_status_code} - {close_msg}")
-            completion_event.set()
-
-        def on_open(ws):
-            print(f"WebSocket connected to {COMFY_WS_URL}")
-
-        # Create WebSocket connection
+        # Create WebSocket connection (synchronous, blocking)
         ws_url = f"{COMFY_WS_URL}?clientId={client_id}"
-        ws = websocket.WebSocketApp(
-            ws_url,
-            on_message=on_message,
-            on_error=on_error,
-            on_close=on_close,
-            on_open=on_open
-        )
+        ws = websocket.WebSocket()
 
-        # Run WebSocket in a separate thread
-        ws_thread = threading.Thread(target=ws.run_forever)
-        ws_thread.daemon = True
-        ws_thread.start()
+        print(f"Connecting to WebSocket: {ws_url}")
+        ws.connect(ws_url, timeout=10)
+        print("WebSocket connected")
 
-        # Wait for completion or timeout
-        completed = completion_event.wait(timeout=timeout)
+        # Set short timeout for recv() to allow checking overall timeout
+        ws.settimeout(1.0)
 
-        if not completed:
-            print("WebSocket timeout")
-            ws.close()
-            return None
+        start_time = time.time()
 
-        if result_data["error"]:
-            print(f"WebSocket error occurred: {result_data['error']}")
-            return None
+        # Listen for messages in blocking loop (RunPod pattern)
+        while True:
+            # Check timeout
+            if time.time() - start_time > timeout:
+                print("WebSocket timeout")
+                ws.close()
+                return None
 
-        return result_data["history"]
+            try:
+                # Blocking receive with 1s timeout to allow timeout checks
+                out = ws.recv()
+
+                if isinstance(out, str):
+                    message = json.loads(out)
+                    msg_type = message.get("type")
+
+                    # Log progress updates
+                    if msg_type == "progress":
+                        progress_data = message.get("data", {})
+                        value = progress_data.get("value", 0)
+                        max_value = progress_data.get("max", 0)
+                        if max_value > 0:
+                            percent = (value / max_value) * 100
+                            print(f"Progress: {percent:.1f}% ({value}/{max_value})")
+
+                    # Log queue status
+                    elif msg_type == "status":
+                        status_data = message.get("data", {})
+                        queue_remaining = status_data.get("status", {}).get("exec_info", {}).get("queue_remaining", 0)
+                        if queue_remaining > 0:
+                            print(f"Queue remaining: {queue_remaining}")
+
+                    # Check for execution completion (RunPod pattern)
+                    elif msg_type == "executing":
+                        executing_data = message.get("data", {})
+                        node = executing_data.get("node")
+
+                        # node is None when execution completes
+                        if node is None and executing_data.get("prompt_id") == prompt_id:
+                            print("Execution completed (WebSocket)")
+                            ws.close()
+
+                            # Fetch final history
+                            history = get_history(prompt_id)
+                            return history
+
+                    # Check for execution errors
+                    elif msg_type == "execution_error":
+                        error_data = message.get("data", {})
+                        if error_data.get("prompt_id") == prompt_id:
+                            print(f"Execution error: {error_data}")
+                            ws.close()
+                            return None
+
+            except websocket.WebSocketTimeoutException:
+                # Timeout on recv(), continue loop to check overall timeout
+                continue
+            except Exception as e:
+                print(f"Error receiving WebSocket message: {e}")
+                ws.close()
+                return None
 
     except ImportError:
         print("websocket-client not installed, falling back to polling")
         return None
     except Exception as e:
-        print(f"WebSocket monitoring failed: {e}, falling back to polling")
+        print(f"WebSocket connection failed: {e}, falling back to polling")
         return None
 
 
@@ -811,14 +804,17 @@ def handler(event: Dict[str, Any]) -> Dict[str, Any]:
         print("Checking ComfyUI server connectivity...")
         check_server()
 
+        # Generate client_id for WebSocket tracking
+        client_id = str(uuid.uuid4())
+
         # Queue the prompt
         print("Queuing prompt...")
-        prompt_id = queue_prompt(workflow, comfyorg_api_key=comfyorg_api_key)
+        prompt_id = queue_prompt(workflow, client_id=client_id, comfyorg_api_key=comfyorg_api_key)
         print(f"Prompt queued with ID: {prompt_id}")
 
         # Wait for completion
         print("Waiting for completion...")
-        history = wait_for_completion(prompt_id, timeout=timeout, use_websocket=use_websocket)
+        history = wait_for_completion(prompt_id, client_id=client_id, timeout=timeout, use_websocket=use_websocket)
         print("Execution completed")
 
         execution_time = time.time() - start_time
