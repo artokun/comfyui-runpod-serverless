@@ -760,8 +760,18 @@ def main():
             verbose=args.verbose
         )
 
-        # Install dependencies for ALL nodes (pass empty list so all are considered orphaned)
-        orphan_results = installer.install_orphan_dependencies([])
+        # Parse config to get list of nodes already processed
+        # This prevents re-installing dependencies for nodes from config.yml
+        processed_nodes = []
+        if args.config and args.config.exists():
+            file_parser = ConfigFileParser(args.config)
+            entries = file_parser.parse()
+            processed_nodes = [entry.repo_name for entry in entries]
+            if processed_nodes:
+                print(f"  Excluding {len(processed_nodes)} node(s) from config.yml")
+                print(f"  (their dependencies were already installed)\n")
+
+        orphan_results = installer.install_orphan_dependencies(processed_nodes)
 
         return 1 if orphan_results.get("deps_failed", 0) > 0 else 0
 

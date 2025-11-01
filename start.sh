@@ -496,16 +496,8 @@ fi
 # Always check for orphaned node dependencies (even when SHA matches)
 # This ensures nodes collected over time have their dependencies installed
 if [ -f "/app/install_nodes.py" ] && [ -d "$COMFYUI_PATH/custom_nodes" ]; then
-    echo "Checking for orphaned node dependencies..."
-    echo "(Nodes in custom_nodes but not in config.yml)"
-    echo ""
-
-    python3 /app/install_nodes.py \
-        --orphans-only \
-        --comfyui-dir "$COMFYUI_PATH" \
-        || echo "⚠ Some orphaned node dependencies failed to install"
-
-    echo ""
+    # Orphaned nodes check removed - batch UV installation in Phase 2
+    # already handles all dependencies for nodes in config.yml
 fi
 
 # Check GPU availability
