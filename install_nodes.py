@@ -457,6 +457,80 @@ class NodeInstaller:
             "failed": self.failed
         }
 
+    def install_orphan_dependencies(self, processed_nodes: List[str]) -> Dict[str, int]:
+        """
+        Install dependencies for all nodes in custom_nodes that weren't in config.yml.
+        This ensures nodes collected over time have their dependencies installed.
+
+        Args:
+            processed_nodes: List of node directory names already processed from config.yml
+
+        Returns:
+            Dict with counts of successful/failed dependency installations
+        """
+        if self.skip_deps:
+            return {"deps_installed": 0, "deps_failed": 0}
+
+        if not self.custom_nodes_dir.exists():
+            return {"deps_installed": 0, "deps_failed": 0}
+
+        # Find all directories in custom_nodes
+        all_node_dirs = [d for d in self.custom_nodes_dir.iterdir() if d.is_dir() and not d.name.startswith('.')]
+
+        # Filter to only orphaned nodes (not in config.yml)
+        orphaned_nodes = [d for d in all_node_dirs if d.name not in processed_nodes]
+
+        if not orphaned_nodes:
+            return {"deps_installed": 0, "deps_failed": 0}
+
+        print(f"\n{'='*70}")
+        print(f"  Checking dependencies for {len(orphaned_nodes)} orphaned node(s)")
+        print(f"  (nodes not in config.yml but found in custom_nodes)")
+        print(f"{'='*70}\n")
+
+        deps_installed = 0
+        deps_failed = 0
+
+        for node_dir in orphaned_nodes:
+            requirements_file = node_dir / "requirements.txt"
+
+            if not requirements_file.exists():
+                print(f"  ✓ {node_dir.name} (no requirements)")
+                continue
+
+            try:
+                print(f"  📦 Installing dependencies for {node_dir.name}...", flush=True)
+
+                result = subprocess.run(
+                    [sys.executable, '-m', 'pip', 'install', '-r', str(requirements_file)],
+                    capture_output=True,
+                    text=True,
+                    timeout=600
+                )
+
+                if result.returncode != 0:
+                    print(f"  ✗ {node_dir.name} (dependencies failed: {result.stderr.strip()[:100]})")
+                    deps_failed += 1
+                else:
+                    print(f"  ✓ {node_dir.name} (dependencies installed)")
+                    deps_installed += 1
+
+            except subprocess.TimeoutExpired:
+                print(f"  ✗ {node_dir.name} (TIMEOUT installing dependencies)")
+                deps_failed += 1
+            except Exception as e:
+                print(f"  ✗ {node_dir.name} (error: {str(e)[:100]})")
+                deps_failed += 1
+
+        print(f"\n{'='*70}")
+        print(f"  Orphaned dependencies: {deps_installed} installed, {deps_failed} failed")
+        print(f"{'='*70}\n")
+
+        return {
+            "deps_installed": deps_installed,
+            "deps_failed": deps_failed
+        }
+
 
 def main():
     parser = argparse.ArgumentParser(
@@ -595,7 +669,15 @@ def main():
     )
     results = installer.install_all(entries, max_workers=args.max_workers)
 
-    return 1 if results["failed"] > 0 else 0
+    # Install dependencies for any orphaned nodes (nodes in custom_nodes but not in config.yml)
+    # This ensures nodes collected over time have their dependencies installed
+    processed_node_names = [entry.repo_name for entry in entries]
+    orphan_results = installer.install_orphan_dependencies(processed_node_names)
+
+    # Consider orphan dependency failures as failures
+    total_failed = results["failed"] + orphan_results.get("deps_failed", 0)
+
+    return 1 if total_failed > 0 else 0
 
 
 if __name__ == "__main__":
