@@ -351,11 +351,14 @@ class ModelDownloader:
         # Check if exists
         if output_file.exists() and not self.force:
             self.skipped += 1
-            return True, f"Skipped (exists): {output_file.name}"
+            return True, f"✓ Skipped (exists): {output_file.name}"
+
+        # Show progress before starting
+        print(f"  📥 Downloading {output_file.name}...", flush=True)
 
         try:
             if self.verbose:
-                print(f"  Downloading: {entry.url}")
+                print(f"  URL: {entry.url}")
                 print(f"  To: {output_file}")
 
             # Try HuggingFace fast download first (uses hf_transfer for 3-5x speed)
@@ -448,9 +451,10 @@ class ModelDownloader:
 
         except Exception as e:
             self.failed += 1
+            error_msg = str(e)[:200]  # Truncate long errors
             if entry.optional:
-                return True, f"Optional model failed (continuing): {e}"
-            return False, f"Failed: {e}"
+                return True, f"⚠️ DOWNLOAD FAILED (optional, continuing): {output_file.name} - {error_msg}"
+            return False, f"❌ DOWNLOAD FAILED: {output_file.name} - {error_msg}"
 
 
 def main():

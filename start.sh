@@ -28,13 +28,37 @@ if [ ! -f "$COMFYUI_PATH/main.py" ]; then
     echo "ComfyUI not found at: $COMFYUI_PATH"
     echo "Cloning ComfyUI..."
 
-    # Remove empty directory if it exists
-    if [ -d "$COMFYUI_PATH" ] && [ -z "$(ls -A "$COMFYUI_PATH")" ]; then
-        rmdir "$COMFYUI_PATH"
+    # Handle volume mounts: Docker Compose may create subdirectories for nested volume mounts
+    # We need to clone into a directory that may have these subdirs (output, user, etc.)
+    if [ -d "$COMFYUI_PATH" ]; then
+        # Save any volume-mounted subdirectories
+        TEMP_BACKUP=$(mktemp -d)
+        if [ -d "$COMFYUI_PATH/output" ]; then
+            mv "$COMFYUI_PATH/output" "$TEMP_BACKUP/" 2>/dev/null || true
+        fi
+        if [ -d "$COMFYUI_PATH/user" ]; then
+            mv "$COMFYUI_PATH/user" "$TEMP_BACKUP/" 2>/dev/null || true
+        fi
+
+        # Remove the directory to allow clean clone
+        rm -rf "$COMFYUI_PATH"
     fi
 
     mkdir -p "$(dirname "$COMFYUI_PATH")"
     git clone https://github.com/comfyanonymous/ComfyUI.git "$COMFYUI_PATH"
+
+    # Restore volume-mounted subdirectories if they existed
+    if [ -d "$TEMP_BACKUP" ]; then
+        if [ -d "$TEMP_BACKUP/output" ]; then
+            rm -rf "$COMFYUI_PATH/output"
+            mv "$TEMP_BACKUP/output" "$COMFYUI_PATH/" 2>/dev/null || true
+        fi
+        if [ -d "$TEMP_BACKUP/user" ]; then
+            rm -rf "$COMFYUI_PATH/user"
+            mv "$TEMP_BACKUP/user" "$COMFYUI_PATH/" 2>/dev/null || true
+        fi
+        rm -rf "$TEMP_BACKUP"
+    fi
 
     echo "Installing ComfyUI dependencies..."
     cd "$COMFYUI_PATH"
@@ -82,6 +106,29 @@ echo "  Models Path: ${MODELS_PATH}"
 echo "  Environment: ${ENVIRONMENT}"
 echo ""
 
+# Copy helper files to workspace for easy access from Jupyter
+WORKSPACE_DIR=""
+if [ -d "/runpod-volume" ]; then
+    WORKSPACE_DIR="/runpod-volume"
+else
+    WORKSPACE_DIR="$COMFYUI_PATH/.."
+fi
+
+# Copy apply_config.sh if not exists
+if [ ! -f "$WORKSPACE_DIR/apply_config.sh" ] && [ -f "/app/apply_config.sh" ]; then
+    cp /app/apply_config.sh "$WORKSPACE_DIR/"
+    chmod +x "$WORKSPACE_DIR/apply_config.sh"
+    echo "✓ Copied apply_config.sh to workspace"
+fi
+
+# Copy CONFIG_MANAGEMENT.md if not exists
+if [ ! -f "$WORKSPACE_DIR/CONFIG_MANAGEMENT.md" ] && [ -f "/app/CONFIG_MANAGEMENT.md" ]; then
+    cp /app/CONFIG_MANAGEMENT.md "$WORKSPACE_DIR/"
+    echo "✓ Copied CONFIG_MANAGEMENT.md to workspace"
+fi
+
+echo ""
+
 # Configuration hierarchy:
 # 1. CONFIG_YML env var → writes to volume (persistent, editable)
 # 2. config.yml on volume (source of truth)
@@ -105,15 +152,59 @@ if [ -n "$CONFIG_YML" ]; then
     # Create parent directory if needed
     mkdir -p "$(dirname "$VOLUME_CONFIG")"
 
-    # Write environment variable content to persistent volume
-    echo "$CONFIG_YML" > "$VOLUME_CONFIG"
+    # Try to detect and decode base64 encoding
+    CONFIG_CONTENT=""
+    IS_BASE64=false
+
+    # Check if it looks like base64 (no newlines, only valid base64 chars)
+    if echo "$CONFIG_YML" | grep -qE '^[A-Za-z0-9+/=]+$'; then
+        echo "Detected possible base64 encoding, attempting decode..."
+
+        # Try to decode
+        DECODED=$(echo "$CONFIG_YML" | base64 -d 2>/dev/null)
+
+        if [ $? -eq 0 ] && [ -n "$DECODED" ]; then
+            # Validate it's valid YAML by checking for basic structure
+            if echo "$DECODED" | grep -qE '^(models:|nodes:|#)'; then
+                echo "✓ Successfully decoded base64 config"
+                CONFIG_CONTENT="$DECODED"
+                IS_BASE64=true
+            else
+                echo "⚠ Warning: Decoded content doesn't look like valid config.yml"
+                echo "   Expected 'models:' or 'nodes:' sections"
+                echo "   Treating as plain text..."
+                CONFIG_CONTENT="$CONFIG_YML"
+            fi
+        else
+            echo "⚠ Warning: Base64 decode failed, treating as plain text"
+            CONFIG_CONTENT="$CONFIG_YML"
+        fi
+    else
+        # Contains newlines or special chars, treat as plain YAML
+        CONFIG_CONTENT="$CONFIG_YML"
+    fi
+
+    # Write config to volume
+    echo "$CONFIG_CONTENT" > "$VOLUME_CONFIG"
 
     if [ $? -eq 0 ]; then
         echo "✓ Config written to persistent volume"
+
+        # Validate YAML structure
+        if ! echo "$CONFIG_CONTENT" | grep -qE '(models:|nodes:)'; then
+            echo ""
+            echo "⚠ Warning: Config may be invalid!"
+            echo "   Expected sections: 'models:' and/or 'nodes:'"
+            echo "   Please verify your config.yml format"
+        fi
+
         echo ""
-        echo "This file will persist across restarts and can be edited:"
-        echo "  - Pods: Upload via Jupyter or edit directly"
+        echo "Config management options:"
+        echo "  - Pods: Edit via Jupyter (port 8888) at $VOLUME_CONFIG"
         echo "  - Endpoints: Update CONFIG_YML env var to regenerate"
+        if [ "$IS_BASE64" = true ]; then
+            echo "  - Base64 encode at: https://www.base64encode.org/"
+        fi
         echo ""
     else
         echo "✗ Failed to write config (using default)"
@@ -122,90 +213,173 @@ if [ -n "$CONFIG_YML" ]; then
     echo ""
 fi
 
-# Install custom nodes from config.yml
-# Priority: volume config → baked-in config
-echo "Checking for custom nodes to install..."
+# ============================================================
+# Configuration Change Detection (SHA-based for fast warm starts)
+# ============================================================
 
 # Determine config file location (priority order)
 CONFIG_FILE=""
 if [ -f "/runpod-volume/config.yml" ]; then
     CONFIG_FILE="/runpod-volume/config.yml"
-    echo "Using config from: /runpod-volume/config.yml (persistent volume)"
 elif [ -f "$COMFYUI_PATH/../config.yml" ]; then
     CONFIG_FILE="$COMFYUI_PATH/../config.yml"
-    echo "Using config from: $COMFYUI_PATH/../config.yml (mounted volume)"
 elif [ -f "/app/config.yml" ]; then
     CONFIG_FILE="/app/config.yml"
-    echo "Using config from: /app/config.yml (baked-in default)"
 fi
 
-if [ -n "$CONFIG_FILE" ] && [ -f "/app/install_nodes.py" ]; then
-        # Count active node entries
-        ACTIVE_NODES=$(grep -A 2 "^  - url:" "$CONFIG_FILE" | grep -v "^#" | grep "url:" | wc -l || echo "0")
+# Determine SHA storage location (persistent volume)
+SHA_FILE=""
+if [ -d "/runpod-volume" ]; then
+    SHA_FILE="/runpod-volume/.config-sha256"
+elif [ -d "$COMFYUI_PATH/.." ]; then
+    SHA_FILE="$COMFYUI_PATH/../.config-sha256"
+fi
 
-        if [ "$ACTIVE_NODES" -gt 0 ]; then
-            echo "Found $ACTIVE_NODES custom node(s) to install"
+# Calculate current config SHA
+CURRENT_SHA=""
+if [ -n "$CONFIG_FILE" ] && [ -f "$CONFIG_FILE" ]; then
+    CURRENT_SHA=$(sha256sum "$CONFIG_FILE" | awk '{print $1}')
+fi
 
-            python3 /app/install_nodes.py \
-                --config "$CONFIG_FILE" \
-                --comfyui-dir "$COMFYUI_PATH" \
-                --max-workers 4 \
-                || INSTALL_EXIT_CODE=$?
+# Check if config changed
+CONFIG_CHANGED=true
+SKIP_INSTALL=false
 
-            if [ "${INSTALL_EXIT_CODE:-0}" -eq 0 ]; then
-                echo "✓ Custom nodes installation complete"
+if [ -n "$CURRENT_SHA" ] && [ -n "$SHA_FILE" ] && [ -f "$SHA_FILE" ]; then
+    STORED_SHA=$(cat "$SHA_FILE" 2>/dev/null || echo "")
+
+    if [ "$CURRENT_SHA" = "$STORED_SHA" ]; then
+        echo "=================================================="
+        echo "  Fast Warm Start: Config Unchanged"
+        echo "=================================================="
+        echo ""
+        echo "✓ Config SHA matches stored hash"
+        echo "  SHA: ${CURRENT_SHA:0:16}..."
+        echo ""
+        echo "Skipping model downloads and node installations for fast startup."
+        echo "This significantly reduces warm start time!"
+        echo ""
+        echo "To force reinstall, delete: $SHA_FILE"
+        echo "=================================================="
+        echo ""
+        CONFIG_CHANGED=false
+        SKIP_INSTALL=true
+    else
+        echo "=================================================="
+        echo "  Config Changed - Applying Updates"
+        echo "=================================================="
+        echo ""
+        echo "Previous SHA: ${STORED_SHA:0:16}..."
+        echo "Current SHA:  ${CURRENT_SHA:0:16}..."
+        echo ""
+        echo "Config has changed, applying updates..."
+        echo "=================================================="
+        echo ""
+    fi
+elif [ -n "$CURRENT_SHA" ]; then
+    echo "=================================================="
+    echo "  First Run - Installing from Config"
+    echo "=================================================="
+    echo ""
+    echo "Config SHA: ${CURRENT_SHA:0:16}..."
+    echo ""
+    echo "This is the first run or cache was cleared."
+    echo "Installing models and custom nodes..."
+    echo "=================================================="
+    echo ""
+fi
+
+# Install custom nodes from config.yml
+# Priority: volume config → baked-in config
+
+if [ "$SKIP_INSTALL" = false ]; then
+    echo "Checking for custom nodes to install..."
+
+    if [ -f "/runpod-volume/config.yml" ]; then
+        echo "Using config from: /runpod-volume/config.yml (persistent volume)"
+    elif [ -f "$COMFYUI_PATH/../config.yml" ]; then
+        echo "Using config from: $COMFYUI_PATH/../config.yml (mounted volume)"
+    elif [ -f "/app/config.yml" ]; then
+        echo "Using config from: /app/config.yml (baked-in default)"
+    fi
+fi
+
+if [ "$SKIP_INSTALL" = false ]; then
+    if [ -n "$CONFIG_FILE" ] && [ -f "/app/install_nodes.py" ]; then
+            # Count active node entries
+            ACTIVE_NODES=$(grep -A 2 "^  - url:" "$CONFIG_FILE" | grep -v "^#" | grep "url:" | wc -l || echo "0")
+
+            if [ "$ACTIVE_NODES" -gt 0 ]; then
+                echo "Found $ACTIVE_NODES custom node(s) to install"
+
+                python3 /app/install_nodes.py \
+                    --config "$CONFIG_FILE" \
+                    --comfyui-dir "$COMFYUI_PATH" \
+                    --max-workers 4 \
+                    || INSTALL_EXIT_CODE=$?
+
+                if [ "${INSTALL_EXIT_CODE:-0}" -eq 0 ]; then
+                    echo "✓ Custom nodes installation complete"
+                else
+                    echo "⚠ Some custom nodes failed to install (check logs above)"
+                fi
             else
-                echo "⚠ Some custom nodes failed to install (check logs above)"
+                echo "No custom nodes configured for installation (all commented out)"
             fi
-        else
-            echo "No custom nodes configured for installation (all commented out)"
-        fi
-else
-    echo "⚠ config.yml or install_nodes.py not found, skipping custom node installation"
+    else
+        echo "⚠ config.yml or install_nodes.py not found, skipping custom node installation"
+    fi
+    echo ""
 fi
-echo ""
 
 # Download models from config.yml
-echo "Checking for models to download..."
 
-# Determine config file location (priority order - same as nodes)
-CONFIG_FILE=""
-if [ -f "/runpod-volume/config.yml" ]; then
-    CONFIG_FILE="/runpod-volume/config.yml"
-    echo "Using config from: /runpod-volume/config.yml (persistent volume)"
-elif [ -f "$COMFYUI_PATH/../config.yml" ]; then
-    CONFIG_FILE="$COMFYUI_PATH/../config.yml"
-    echo "Using config from: $COMFYUI_PATH/../config.yml (mounted volume)"
-elif [ -f "/app/config.yml" ]; then
-    CONFIG_FILE="/app/config.yml"
-    echo "Using config from: /app/config.yml (baked-in default)"
-fi
+if [ "$SKIP_INSTALL" = false ]; then
+    echo "Checking for models to download..."
 
-if [ -n "$CONFIG_FILE" ] && [ -f "/app/download_models.py" ]; then
-        # Count active model entries
-        ACTIVE_MODELS=$(grep -A 2 "^  - url:" "$CONFIG_FILE" | grep -v "^#" | grep "url:" | wc -l || echo "0")
+    # Config file already determined above
+    if [ -f "/runpod-volume/config.yml" ]; then
+        echo "Using config from: /runpod-volume/config.yml (persistent volume)"
+    elif [ -f "$COMFYUI_PATH/../config.yml" ]; then
+        echo "Using config from: $COMFYUI_PATH/../config.yml (mounted volume)"
+    elif [ -f "/app/config.yml" ]; then
+        echo "Using config from: /app/config.yml (baked-in default)"
+    fi
 
-        if [ "$ACTIVE_MODELS" -gt 0 ]; then
-            echo "Found $ACTIVE_MODELS model(s) to download"
+    if [ -n "$CONFIG_FILE" ] && [ -f "/app/download_models.py" ]; then
+            # Count active model entries
+            ACTIVE_MODELS=$(grep -A 2 "^  - url:" "$CONFIG_FILE" | grep -v "^#" | grep "url:" | wc -l || echo "0")
 
-            python3 /app/download_models.py \
-                --config "$CONFIG_FILE" \
-                --base-dir "$COMFYUI_PATH/models" \
-                --parallel 3 \
-                || DOWNLOAD_EXIT_CODE=$?
+            if [ "$ACTIVE_MODELS" -gt 0 ]; then
+                echo "Found $ACTIVE_MODELS model(s) to download"
 
-            if [ "${DOWNLOAD_EXIT_CODE:-0}" -eq 0 ]; then
-                echo "✓ Model downloads complete"
+                python3 /app/download_models.py \
+                    --config "$CONFIG_FILE" \
+                    --base-dir "$COMFYUI_PATH/models" \
+                    --parallel 3 \
+                    || DOWNLOAD_EXIT_CODE=$?
+
+                if [ "${DOWNLOAD_EXIT_CODE:-0}" -eq 0 ]; then
+                    echo "✓ Model downloads complete"
+                else
+                    echo "⚠ Some model downloads failed (check logs above)"
+                fi
             else
-                echo "⚠ Some model downloads failed (check logs above)"
+                echo "No models configured for download (all commented out)"
             fi
-        else
-            echo "No models configured for download (all commented out)"
-        fi
-else
-    echo "⚠ download_models.py not found, skipping model downloads"
+    else
+        echo "⚠ download_models.py not found, skipping model downloads"
+    fi
+    echo ""
+
+    # Update SHA after successful installation
+    if [ -n "$CURRENT_SHA" ] && [ -n "$SHA_FILE" ]; then
+        echo "$CURRENT_SHA" > "$SHA_FILE"
+        echo "✓ Config SHA updated: ${CURRENT_SHA:0:16}..."
+        echo "  Future warm starts will be faster!"
+        echo ""
+    fi
 fi
-echo ""
 
 # Check GPU availability
 echo "Checking GPU..."
@@ -232,6 +406,28 @@ if [ "$ENVIRONMENT" = "runpod" ] && [ -d "/runpod-volume" ]; then
 
     echo ""
 fi
+
+# Start Jupyter in background
+echo "Starting Jupyter server on port 8888..."
+
+# Configure Jupyter authentication
+JUPYTER_AUTH_ARGS=""
+if [ -n "$JUPYTER_PASSWORD" ]; then
+    echo "  🔒 Password protection enabled"
+    JUPYTER_AUTH_ARGS="--ServerApp.token='$JUPYTER_PASSWORD' --ServerApp.password=''"
+else
+    echo "  🔓 No password required (set JUPYTER_PASSWORD env to enable)"
+    JUPYTER_AUTH_ARGS="--ServerApp.token='' --ServerApp.password=''"
+fi
+
+cd /app
+jupyter lab --ip=0.0.0.0 --port=8888 --no-browser --allow-root \
+    $JUPYTER_AUTH_ARGS \
+    --ServerApp.allow_origin='*' \
+    --ServerApp.root_dir="$COMFYUI_PATH/.." &
+JUPYTER_PID=$!
+echo "  PID: ${JUPYTER_PID}"
+echo ""
 
 # Start ComfyUI in background
 echo "Starting ComfyUI server on port 8188..."
@@ -271,19 +467,6 @@ HANDLER_PID=$!
 echo "  PID: ${HANDLER_PID}"
 echo ""
 
-# Wait for handler to be ready (if running in local mode)
-if [ "$ENVIRONMENT" = "local" ]; then
-    echo "Waiting for handler to start..."
-    sleep 3
-
-    if curl -s http://127.0.0.1:8000/ > /dev/null 2>&1; then
-        echo "✓ Handler is ready!"
-    else
-        echo "⚠ Handler may not be responding (this is normal for RunPod mode)"
-    fi
-    echo ""
-fi
-
 echo "=================================================="
 echo "  Startup Complete!"
 echo "=================================================="
@@ -291,17 +474,19 @@ echo ""
 echo "Services running:"
 echo "  • ComfyUI:      http://localhost:8188"
 echo "  • RunPod API:   http://localhost:8000"
+echo "  • Jupyter Lab:  http://localhost:8888"
 echo ""
 
 if [ "$ENVIRONMENT" = "local" ]; then
     echo "Local Development Mode:"
     echo "  1. Open http://localhost:8188 to design workflows"
-    echo "  2. Export workflow in API format"
-    echo "  3. Test with: curl -X POST http://localhost:8000 -d @example_request.json"
+    echo "  2. Use Jupyter (port 8888) for testing and file management"
+    echo "  3. Test handler: Create workflows in examples/ directory"
     echo ""
 fi
 
 echo "Logs:"
+echo "  • Jupyter PID:  ${JUPYTER_PID}"
 echo "  • ComfyUI PID:  ${COMFYUI_PID}"
 echo "  • Handler PID:  ${HANDLER_PID}"
 echo ""
@@ -315,6 +500,7 @@ shutdown() {
     echo "Shutting down services..."
     kill $HANDLER_PID 2>/dev/null || true
     kill $COMFYUI_PID 2>/dev/null || true
+    kill $JUPYTER_PID 2>/dev/null || true
     echo "Shutdown complete"
     exit 0
 }
@@ -323,7 +509,7 @@ shutdown() {
 trap shutdown SIGTERM SIGINT
 
 # Wait for processes
-wait $COMFYUI_PID $HANDLER_PID
+wait $JUPYTER_PID $COMFYUI_PID $HANDLER_PID
 
 # If we get here, one of the processes died unexpectedly
 echo "⚠ A service has stopped unexpectedly!"

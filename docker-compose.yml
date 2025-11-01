@@ -6,33 +6,23 @@ services:
       context: .
       dockerfile: Dockerfile
       target: final
-      args:
-        GPU_ARCH: ${GPU_ARCH:-ada}
-    image: comfyui:${GPU_ARCH:-ada}
+    image: artokun/comfyui-runpod:latest
     container_name: comfyui
     environment:
       - NVIDIA_VISIBLE_DEVICES=all
-      - GPU_ARCH=${GPU_ARCH:-ada}
-      - COMFYUI_PATH=/comfyui
+      - COMFYUI_PATH=/workspace/ComfyUI
       - AUTO_UPDATE=${AUTO_UPDATE:-false}  # Set to 'true' for auto-updates on startup
-      - SERVE_API_LOCALLY=true  # Enable local API serving
     ports:
       - "8188:8188"  # ComfyUI web interface
       - "8000:8000"  # RunPod API handler
+      - "8888:8888"  # Jupyter Lab
     volumes:
-      # Mount ComfyUI from filesystem (auto-created if missing)
-      - ${COMFYUI_PATH:-./ComfyUI}:/comfyui
-      # Output directory
-      - ./output:/comfyui/output
-      # Workflows directory
-      - ./workflows:/comfyui/user/default/workflows
+      # Single workspace directory (contains everything: ComfyUI, outputs, workflows, models)
+      - ./workspace:/workspace
       # Configuration file (edit without rebuilding!)
-      - ./config.yml:/comfyui/../config.yml
+      - ./config.yml:/workspace/config.yml
       # Examples directory (test scripts and workflows)
       - ./examples:/app/examples
-      # Optional: Mount your models directory
-      # Uncomment and set MODELS_PATH in .env
-      # - ${MODELS_PATH}:/comfyui/models
     deploy:
       resources:
         reservations:

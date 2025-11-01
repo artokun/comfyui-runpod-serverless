@@ -13,5 +13,6 @@ build
 README.md
 example_workflow.json
 example_request.json
+workspace/
 .env
 *.log

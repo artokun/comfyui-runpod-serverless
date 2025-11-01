@@ -62,9 +62,9 @@ RUN wget -O /tmp/comfyui-requirements.txt \
     rm /tmp/comfyui-requirements.txt
 
 # Install additional dependencies (xformers, performance optimizations)
-RUN echo "Installing xformers (latest compatible with PyTorch ${TORCH_VERSION})..." && \
-    pip3 install --no-cache-dir xformers transformers accelerate || \
-    (echo "xformers install failed, continuing without it..." && pip3 install --no-cache-dir transformers accelerate)
+# Note: Skip xformers to avoid PyTorch version conflicts - ComfyUI will use built-in attention
+RUN echo "Installing transformers and accelerate..." && \
+    pip3 install --no-cache-dir transformers accelerate
 
 # Install Triton for Linux (already built-in for CUDA-enabled PyTorch on Linux)
 # Note: triton-windows is Windows-only, Linux uses triton from PyTorch
@@ -91,11 +91,14 @@ COPY s3_upload.py .
 COPY start.sh .
 COPY download_models.py .
 COPY install_nodes.py .
+COPY test_input.json .
+COPY apply_config.sh .
 
-# Copy unified config file
+# Copy unified config file and documentation
 COPY config.yml .
+COPY CONFIG_MANAGEMENT.md .
 
-RUN chmod +x /app/start.sh /app/download_models.py /app/install_nodes.py
+RUN chmod +x /app/start.sh /app/download_models.py /app/install_nodes.py /app/apply_config.sh
 
 # Environment variables
 ENV COMFY_API_URL=http://127.0.0.1:8188
@@ -105,13 +108,12 @@ ENV COMFYUI_PATH=/comfyui
 ENV HF_HUB_ENABLE_HF_TRANSFER=1
 
 # Expose ports
-EXPOSE 8000 8188
+EXPOSE 8000 8188 8888
 
 # Labels
-LABEL gpu_arch="${GPU_ARCH}"
 LABEL cuda_version="${CUDA_VERSION}"
 LABEL pytorch_version="${TORCH_VERSION}"
-LABEL description="ComfyUI + RunPod Handler"
+LABEL description="ComfyUI + RunPod Handler - Universal GPU Support"
 
 # Healthcheck
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \

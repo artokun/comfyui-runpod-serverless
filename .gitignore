@@ -47,12 +47,8 @@ coverage.xml
 nosetests.xml
 
 # ComfyUI
-ComfyUI/
-models/
-custom_nodes/
-output/
-workflows/
 temp/
+workspace/
 
 # Environment variables
 .env

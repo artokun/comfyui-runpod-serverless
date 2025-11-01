@@ -1,0 +1,193 @@
+# Auto-deploy workflow
+# Triggers on push to main branch
+# - Determines version bump from conventional commits
+# - Creates git tag and GitHub release
+# - Builds and pushes Docker images for both Ada and Blackwell
+
+name: Release and Deploy
+
+on:
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - 'examples/**'
+      - '.github/**'
+      - '!.github/workflows/release.yml'
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  version:
+    name: Determine Version
+    runs-on: ubuntu-latest
+    outputs:
+      new_version: ${{ steps.version.outputs.new_version }}
+      changelog: ${{ steps.version.outputs.changelog }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get Previous Tag
+        id: previoustag
+        run: |
+          PREV_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+          echo "previous_tag=$PREV_TAG" >> $GITHUB_OUTPUT
+
+      - name: Determine Version Bump
+        id: version
+        run: |
+          PREV_TAG="${{ steps.previoustag.outputs.previous_tag }}"
+
+          # Extract version numbers
+          PREV_VERSION=${PREV_TAG#v}
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$PREV_VERSION"
+
+          # Get commits since last tag
+          COMMITS=$(git log ${PREV_TAG}..HEAD --pretty=format:"%s")
+
+          # Determine bump type based on conventional commits
+          BUMP="none"
+          if echo "$COMMITS" | grep -q "^feat\!:\|^fix\!:\|BREAKING CHANGE:"; then
+            BUMP="major"
+          elif echo "$COMMITS" | grep -q "^feat:"; then
+            BUMP="minor"
+          elif echo "$COMMITS" | grep -q "^fix:"; then
+            BUMP="patch"
+          fi
+
+          # Calculate new version
+          case $BUMP in
+            major)
+              MAJOR=$((MAJOR + 1))
+              MINOR=0
+              PATCH=0
+              ;;
+            minor)
+              MINOR=$((MINOR + 1))
+              PATCH=0
+              ;;
+            patch)
+              PATCH=$((PATCH + 1))
+              ;;
+            none)
+              echo "No version bump needed"
+              exit 0
+              ;;
+          esac
+
+          NEW_VERSION="v${MAJOR}.${MINOR}.${PATCH}"
+          echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
+
+          # Generate changelog
+          CHANGELOG=$(git log ${PREV_TAG}..HEAD --pretty=format:"- %s (%h)" --no-merges)
+          echo "changelog<<EOF" >> $GITHUB_OUTPUT
+          echo "$CHANGELOG" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+          echo "Bumping from $PREV_TAG to $NEW_VERSION (type: $BUMP)"
+
+  build-and-deploy:
+    name: Build and Push Images
+    needs: version
+    if: needs.version.outputs.new_version != ''
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        arch: [ada, blackwell]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_TOKEN }}
+
+      - name: Set Architecture Variables
+        id: arch_vars
+        run: |
+          case ${{ matrix.arch }} in
+            ada)
+              echo "cuda_version=11.8" >> $GITHUB_OUTPUT
+              echo "pytorch_version=2.1.0" >> $GITHUB_OUTPUT
+              ;;
+            blackwell)
+              echo "cuda_version=12.4" >> $GITHUB_OUTPUT
+              echo "pytorch_version=2.5.0" >> $GITHUB_OUTPUT
+              ;;
+          esac
+
+      - name: Build and Push
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: |
+            ${{ secrets.DOCKER_USERNAME }}/comfyui-runpod:${{ needs.version.outputs.new_version }}-${{ matrix.arch }}
+            ${{ secrets.DOCKER_USERNAME }}/comfyui-runpod:${{ matrix.arch }}
+          build-args: |
+            GPU_ARCH=${{ matrix.arch }}
+            CUDA_VERSION=${{ steps.arch_vars.outputs.cuda_version }}
+            PYTORCH_VERSION=${{ steps.arch_vars.outputs.pytorch_version }}
+          cache-from: type=registry,ref=${{ secrets.DOCKER_USERNAME }}/comfyui-runpod:${{ matrix.arch }}
+          cache-to: type=inline
+
+  create-release:
+    name: Create GitHub Release
+    needs: [version, build-and-deploy]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create Git Tag
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -a ${{ needs.version.outputs.new_version }} -m "Release ${{ needs.version.outputs.new_version }}"
+          git push origin ${{ needs.version.outputs.new_version }}
+
+      - name: Create GitHub Release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ needs.version.outputs.new_version }}
+          release_name: Release ${{ needs.version.outputs.new_version }}
+          body: |
+            ## Changes
+
+            ${{ needs.version.outputs.changelog }}
+
+            ## Docker Images
+
+            Ada (RTX 4090):
+            ```
+            docker pull ${{ secrets.DOCKER_USERNAME }}/comfyui-runpod:${{ needs.version.outputs.new_version }}-ada
+            ```
+
+            Blackwell (RTX 5090/6000 Pro):
+            ```
+            docker pull ${{ secrets.DOCKER_USERNAME }}/comfyui-runpod:${{ needs.version.outputs.new_version }}-blackwell
+            ```
+
+            ## RunPod Configuration
+
+            Use in your RunPod endpoint:
+            - Ada: `${{ secrets.DOCKER_USERNAME }}/comfyui-runpod:ada`
+            - Blackwell: `${{ secrets.DOCKER_USERNAME }}/comfyui-runpod:blackwell`
+
+            Or pin to this version:
+            - Ada: `${{ secrets.DOCKER_USERNAME }}/comfyui-runpod:${{ needs.version.outputs.new_version }}-ada`
+            - Blackwell: `${{ secrets.DOCKER_USERNAME }}/comfyui-runpod:${{ needs.version.outputs.new_version }}-blackwell`
+          draft: false
+          prerelease: false

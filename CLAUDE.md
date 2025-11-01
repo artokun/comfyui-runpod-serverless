@@ -30,13 +30,20 @@ python install_nodes.py --dry-run    # Preview what will install
 ./build.sh --push                    # Build and push manually
 ```
 
-Access locally: http://localhost:8188 (ComfyUI UI), http://localhost:8000 (API)
+Access locally: http://localhost:8188 (ComfyUI UI), http://localhost:8000 (API), http://localhost:8888 (Jupyter Lab)
+
+**Local workspace**: Everything persists in `./workspace/` directory:
+- `./workspace/ComfyUI/` - ComfyUI installation
+- `./workspace/ComfyUI/output/` - Generated images
+- `./workspace/ComfyUI/user/default/workflows/` - Saved workflows
 
 ## Architecture
 
-**Single Dockerfile with auto-install**: ComfyUI clones to `./ComfyUI` on first run. Models and custom nodes auto-install from `config.yml` if configured. Persistent across rebuilds.
+**Single Dockerfile with auto-install**: ComfyUI clones to `./workspace/ComfyUI` (local) or `/runpod-volume/ComfyUI` (RunPod) on first run. Models and custom nodes auto-install from `config.yml` if configured. Fully persistent across restarts.
 
 **Default configuration**: Minimal setup (SD 1.5 + ComfyUI Manager, ~4GB) for fast builds. Advanced setups (WAN Animate 2.2, ~30GB) available in `config.example.yml`.
+
+**Fast warm starts (SHA-based caching)**: Container calculates SHA256 hash of `config.yml` and stores it on persistent volume (`.config-sha256`). On subsequent starts, if SHA matches, model downloads and node installations are skipped entirely for instant warm starts. Critical for RunPod Endpoint performance where every second counts. To force reinstall, delete the SHA file.
 
 **Handler flow** (handler.py):
 1. Receives job from RunPod
@@ -66,7 +73,16 @@ Access locally: http://localhost:8188 (ComfyUI UI), http://localhost:8000 (API)
 
 **Important: config.yml is mounted as a volume - edit anytime without rebuilding!**
 
-Edit `config.yml` to configure models and custom nodes:
+Edit `config.yml` to configure models and custom nodes.
+
+**Quick Apply (No Restart):**
+```bash
+# After editing config.yml
+cd /app
+./apply_config.sh
+```
+
+This instantly downloads models and installs custom nodes without restarting the container. See **[CONFIG_MANAGEMENT.md](CONFIG_MANAGEMENT.md)** for the complete guide.
 
 ```yaml
 # Models section
@@ -89,7 +105,24 @@ Both auto-install on container start if configured. Models support `optional: tr
 
 ## Runtime Configuration Override
 
-For cloud deployments (RunPod, AWS, etc.), you can override config.yml via environment variable:
+### Method 1: Base64 Encoded (Recommended for RunPod)
+
+**Best for**: RunPod Pods/Endpoints - avoids newline/formatting issues in environment variables.
+
+1. Prepare your `config.yml` file with desired models and custom nodes
+2. Encode it at **https://www.base64encode.org/** (copy entire file content, paste, click ENCODE)
+3. Set as environment variable in RunPod:
+
+```bash
+# RunPod Environment Variables
+CONFIG_YML=bW9kZWxzOgogIC0gdXJsOiBodHRwczovL2h1Z2dpbmdmYWNlLmNvLy4uLi9tb2RlbC5zYWZldGVuc29ycwogICAgZGVzdGluYXRpb246IGNoZWNrcG9pbnRzCm5vZGVzOgogIC0gdXJsOiBodHRwczovL2dpdGh1Yi5jb20vLi4uL2N1c3RvbS1ub2RlLmdpdAogICAgdmVyc2lvbjogbGF0ZXN0
+```
+
+The container automatically detects base64 encoding, decodes it, validates the format, and writes to persistent volume.
+
+### Method 2: Plain YAML (Alternative)
+
+For local/docker-compose deployments:
 
 ```bash
 # Set CONFIG_YML environment variable with entire config content
@@ -101,7 +134,33 @@ nodes:
     version: latest"
 ```
 
-On startup, if `CONFIG_YML` is set, it will be written to `/comfyui/../config.yml` (highest priority). This allows customization without rebuilding images or mounting volumes.
+### Method 3: Edit via Jupyter (RunPod Pods)
+
+**Best for**: Live editing in running Pods without redeployment.
+
+1. Access Jupyter at port 8888 (no password by default; set `JUPYTER_PASSWORD` env to enable)
+2. Navigate to `/workspace/config.yml` (Pods) or `/runpod-volume/config.yml` (Serverless)
+3. Edit directly in Jupyter and save
+4. Open Terminal in Jupyter and run:
+   ```bash
+   cd /app
+   chmod +x apply_config.sh
+   ./apply_config.sh
+   ```
+5. Restart ComfyUI if needed
+
+See **[CONFIG_MANAGEMENT.md](CONFIG_MANAGEMENT.md)** for detailed instructions.
+
+### Method 4: Bake into Custom Image
+
+**Best for**: Seamless workflow-specific Pods for sharing/production.
+
+1. Fork this repository
+2. Replace `config.yml` with your custom configuration
+3. Build and push: `docker build -t yourusername/comfyui-custom:latest . && docker push yourusername/comfyui-custom:latest`
+4. Deploy your custom image on RunPod
+
+**Priority order**: CONFIG_YML env (highest) → volume config.yml → baked-in /app/config.yml (fallback)
 
 ## S3 Upload (Optional)
 

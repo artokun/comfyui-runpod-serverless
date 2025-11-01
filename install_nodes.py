@@ -178,9 +178,11 @@ class NodeInstaller:
                 return True, f"✓ {entry.repo_name} (already at {entry.version})"
             else:
                 # Exists but wrong version - update it
+                print(f"  🔄 Updating {entry.repo_name}...", flush=True)
                 return self._update_node(entry, node_dir)
 
         # Clone the repository
+        print(f"  📥 Installing {entry.repo_name}...", flush=True)
         return self._clone_node(entry, node_dir)
 
     def _clone_node(self, entry: NodeEntry, node_dir: Path) -> Tuple[bool, str]:
@@ -198,25 +200,26 @@ class NodeInstaller:
             )
 
             if result.returncode != 0:
-                return False, f"✗ {entry.repo_name} (clone failed: {result.stderr.strip()})"
+                error_msg = result.stderr.strip()[:200]
+                return False, f"❌ INSTALL FAILED: {entry.repo_name} (clone error: {error_msg})"
 
             # Checkout specific version
             success, msg = self._checkout_version(entry, node_dir)
             if not success:
-                return False, msg
+                return False, f"❌ INSTALL FAILED: {msg}"
 
             # Install dependencies
             if not self.skip_deps:
                 dep_success, dep_msg = self._install_dependencies(entry, node_dir)
                 if not dep_success:
-                    return False, f"✗ {entry.repo_name} (installed but dependencies failed: {dep_msg})"
+                    return False, f"❌ INSTALL FAILED: {entry.repo_name} (dependencies: {dep_msg})"
 
             return True, f"✓ {entry.repo_name} @ {entry.version}"
 
         except subprocess.TimeoutExpired:
-            return False, f"✗ {entry.repo_name} (clone timeout after 5 minutes)"
+            return False, f"❌ INSTALL FAILED: {entry.repo_name} (TIMEOUT after 5 min cloning)"
         except Exception as e:
-            return False, f"✗ {entry.repo_name} (error: {e})"
+            return False, f"❌ INSTALL FAILED: {entry.repo_name} ({str(e)[:200]})"
 
     def _update_node(self, entry: NodeEntry, node_dir: Path) -> Tuple[bool, str]:
         """Update an existing node to a different version"""
@@ -233,12 +236,13 @@ class NodeInstaller:
             )
 
             if result.returncode != 0:
-                return False, f"✗ {entry.repo_name} (fetch failed: {result.stderr.strip()})"
+                error_msg = result.stderr.strip()[:200]
+                return False, f"❌ UPDATE FAILED: {entry.repo_name} (fetch error: {error_msg})"
 
             # Checkout specific version
             success, msg = self._checkout_version(entry, node_dir)
             if not success:
-                return False, msg
+                return False, f"❌ UPDATE FAILED: {msg}"
 
             # Update submodules
             subprocess.run(
@@ -251,14 +255,14 @@ class NodeInstaller:
             if not self.skip_deps:
                 dep_success, dep_msg = self._install_dependencies(entry, node_dir)
                 if not dep_success:
-                    return False, f"⚠ {entry.repo_name} @ {entry.version} (updated but dependencies failed: {dep_msg})"
+                    return False, f"⚠️ PARTIAL UPDATE: {entry.repo_name} @ {entry.version} (updated but dependencies failed: {dep_msg})"
 
             return True, f"✓ {entry.repo_name} @ {entry.version} (updated)"
 
         except subprocess.TimeoutExpired:
-            return False, f"✗ {entry.repo_name} (update timeout)"
+            return False, f"❌ UPDATE FAILED: {entry.repo_name} (TIMEOUT)"
         except Exception as e:
-            return False, f"✗ {entry.repo_name} (update error: {e})"
+            return False, f"❌ UPDATE FAILED: {entry.repo_name} ({str(e)[:200]})"
 
     def _checkout_version(self, entry: NodeEntry, node_dir: Path) -> Tuple[bool, str]:
         """Checkout specific version in a git repository"""
@@ -381,25 +385,25 @@ class NodeInstaller:
             return True, "no requirements"
 
         try:
-            if self.verbose:
-                print(f"    Installing dependencies for {entry.repo_name}...")
+            # Always show dependency installation (not just in verbose mode)
+            print(f"    📦 Installing dependencies for {entry.repo_name}...", flush=True)
 
             result = subprocess.run(
                 [sys.executable, '-m', 'pip', 'install', '-r', str(requirements_file)],
                 capture_output=True,
                 text=True,
-                timeout=300
+                timeout=600  # Increased to 10 minutes for heavy packages
             )
 
             if result.returncode != 0:
-                return False, result.stderr.strip()
+                return False, result.stderr.strip()[:200]  # Truncate long errors
 
             return True, "dependencies installed"
 
         except subprocess.TimeoutExpired:
-            return False, "pip install timeout"
+            return False, "TIMEOUT (dependencies took >10 min)"
         except Exception as e:
-            return False, str(e)
+            return False, str(e)[:200]  # Truncate long errors
 
     def install_all(self, entries: List[NodeEntry], max_workers: int = 4) -> Dict[str, int]:
         """Install all node entries in parallel"""
@@ -434,7 +438,7 @@ class NodeInstaller:
                     else:
                         self.failed += 1
                 except Exception as e:
-                    print(f"  ✗ {entry.repo_name} (exception: {e})")
+                    print(f"  ❌ INSTALL FAILED: {entry.repo_name} (exception: {str(e)[:200]})")
                     self.failed += 1
 
         print(f"\n{'='*70}")
