@@ -9,6 +9,14 @@ echo "  ComfyUI + RunPod Handler Startup"
 echo "=================================================="
 echo ""
 
+# PyTorch and CUDA versions (inherited from Dockerfile ENV or set here)
+export CUDA_VERSION="${CUDA_VERSION:-12.8}"
+export CUDA_TAG="${CUDA_TAG:-cu128}"
+export TORCH_VERSION="${TORCH_VERSION:-2.9.0}"
+export TORCHVISION_VERSION="${TORCHVISION_VERSION:-0.24.0}"
+export TORCHAUDIO_VERSION="${TORCHAUDIO_VERSION:-2.9.0}"
+export TORCH_INDEX_URL="${TORCH_INDEX_URL:-https://download.pytorch.org/whl/cu128}"
+
 # Detect environment
 if [ -d "/runpod-volume" ]; then
     echo "✓ Running in RunPod environment"
@@ -26,57 +34,102 @@ else
 fi
 
 # ============================================================
-# Python Package Persistence (Volume-based caching)
+# Python Package Persistence (Volume-First Architecture)
 # ============================================================
 #
-# Store Python site-packages on volume to avoid reinstalling
-# dependencies on every container rebuild. Massive time saver!
+# All Python packages install DIRECTLY to volume (not container!)
+# Container is minimal - just runtime environment
 #
 # Flow:
-# 1. First run: Copy container's packages to volume
-# 2. Set pip to install to volume directory
-# 3. Prepend volume packages to PYTHONPATH
-# 4. Subsequent runs: Packages persist, no reinstall needed!
+# 1. Set PIP_TARGET to volume directory
+# 2. Set PYTHONPATH to use volume packages
+# 3. First run: Install PyTorch, ComfyUI deps to volume
+# 4. Subsequent runs: Packages already on volume, skip install!
 
-CONTAINER_SITE_PACKAGES="/usr/local/lib/python3.10/dist-packages"
-
-# Create volume package directory if it doesn't exist
+# Create volume package directory
 mkdir -p "$PYTHON_PACKAGES_DIR"
-
-# On first run, initialize from container's base packages
-if [ ! -f "$PYTHON_PACKAGES_DIR/.initialized" ]; then
-    echo ""
-    echo "=================================================="
-    echo "  First Run: Initializing Python Package Cache"
-    echo "=================================================="
-    echo ""
-    echo "Copying base packages to volume for persistence..."
-    echo "  Source: $CONTAINER_SITE_PACKAGES"
-    echo "  Target: $PYTHON_PACKAGES_DIR"
-    echo ""
-
-    # Copy container's packages to volume (preserving symlinks)
-    cp -a "$CONTAINER_SITE_PACKAGES/." "$PYTHON_PACKAGES_DIR/" 2>/dev/null || true
-
-    # Mark as initialized
-    touch "$PYTHON_PACKAGES_DIR/.initialized"
-    echo "✓ Package cache initialized"
-    echo "  Future pip installs will persist across container rebuilds!"
-    echo "=================================================="
-    echo ""
-else
-    echo "✓ Using persistent Python package cache: $PYTHON_PACKAGES_DIR"
-fi
 
 # Configure pip to install to volume directory
 export PIP_TARGET="$PYTHON_PACKAGES_DIR"
 
-# Prepend volume packages to PYTHONPATH (takes precedence over container packages)
+# Prepend volume packages to PYTHONPATH
 export PYTHONPATH="$PYTHON_PACKAGES_DIR:${PYTHONPATH:-}"
 
-echo "  Python package persistence enabled"
-echo "  - Packages install to: $PYTHON_PACKAGES_DIR"
-echo "  - Persist across container rebuilds: YES"
+echo "✓ Python packages install to: $PYTHON_PACKAGES_DIR"
+echo "  Container is minimal shell - all packages on volume"
+
+# On first run, install core dependencies to volume
+if [ ! -f "$PYTHON_PACKAGES_DIR/.core-deps-installed" ]; then
+    echo ""
+    echo "=================================================="
+    echo "  First Run: Installing Core Dependencies to Volume"
+    echo "=================================================="
+    echo ""
+    echo "Installing PyTorch ${TORCH_VERSION} + CUDA ${CUDA_VERSION}..."
+    echo "This is a one-time install (~10GB, takes 3-5 minutes)"
+    echo ""
+
+    # Install PyTorch (will go to volume via PIP_TARGET)
+    pip3 install --no-cache-dir \
+        --index-url ${TORCH_INDEX_URL} \
+        --extra-index-url https://pypi.org/simple \
+        torch==${TORCH_VERSION}+${CUDA_TAG} \
+        torchvision==${TORCHVISION_VERSION}+${CUDA_TAG} \
+        torchaudio==${TORCHAUDIO_VERSION}+${CUDA_TAG}
+
+    if [ $? -eq 0 ]; then
+        echo "✓ PyTorch installed to volume"
+    else
+        echo "✗ PyTorch installation failed"
+        exit 1
+    fi
+
+    echo ""
+    echo "Installing ComfyUI dependencies..."
+
+    # Fetch and install ComfyUI requirements
+    wget -O /tmp/comfyui-requirements.txt \
+        https://raw.githubusercontent.com/comfyanonymous/ComfyUI/master/requirements.txt
+    pip3 install --no-cache-dir -r /tmp/comfyui-requirements.txt
+    rm /tmp/comfyui-requirements.txt
+
+    echo "✓ ComfyUI dependencies installed"
+
+    echo ""
+    echo "Installing additional dependencies..."
+
+    # Install accelerate
+    pip3 install --no-cache-dir accelerate
+
+    # Install triton
+    pip3 install --no-cache-dir triton || echo "Triton skipped (may be bundled)"
+
+    # Install SageAttention (performance optimization)
+    pip3 install --no-cache-dir \
+        https://github.com/thu-ml/SageAttention/releases/download/v2.2.0/sageattention-2.2.0-py3-none-any.whl \
+        || pip3 install --no-cache-dir "git+https://github.com/thu-ml/SageAttention.git@v2.2.0" \
+        || echo "SageAttention skipped (optional)"
+
+    # Install hf_transfer for faster downloads
+    pip3 install --no-cache-dir hf_transfer
+
+    echo "✓ Additional dependencies installed"
+
+    # Mark as complete
+    touch "$PYTHON_PACKAGES_DIR/.core-deps-installed"
+
+    echo ""
+    echo "=================================================="
+    echo "  Core Dependencies Installed to Volume!"
+    echo "=================================================="
+    echo ""
+    echo "✓ All packages now persist across container rebuilds"
+    echo "✓ Future startups will be instant (no reinstall)"
+    echo "=================================================="
+    echo ""
+else
+    echo "✓ Core dependencies already on volume (skipping install)"
+fi
 
 # Check if ComfyUI exists, if not clone it
 if [ ! -f "$COMFYUI_PATH/main.py" ]; then

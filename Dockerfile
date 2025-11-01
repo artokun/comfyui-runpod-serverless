@@ -1,15 +1,13 @@
-# ComfyUI + RunPod Handler Dockerfile
-# Lightweight handler that connects to ComfyUI over HTTP
-# Works for both local development (with auto-install) and RunPod production
+# ComfyUI + RunPod Handler Dockerfile (Minimal Shell)
+# Container is minimal - only system dependencies and runtime
+# All Python packages install to volume for true persistence
 #
-# Supports all modern NVIDIA GPUs: RTX 4090 (Ada), RTX 5090 (Blackwell), and beyond
-# PyTorch 2.9.0 + CUDA 12.8 provides universal compatibility
-#
-# Local development: docker compose up (uses start.sh to auto-install ComfyUI)
-# Production: docker build -f Dockerfile --target production (runs handler.py only)
+# Architecture:
+# - Container: Ubuntu + Python + system libs (~2-3GB)
+# - Volume: PyTorch, ComfyUI, all deps, models, nodes (persistent)
 
 # =============================================================================
-# Base image - Universal GPU support
+# Minimal base - just runtime environment
 # =============================================================================
 
 FROM nvidia/cuda:12.8.1-cudnn-runtime-ubuntu22.04 AS final
@@ -28,7 +26,7 @@ ENV PYTHONNOUSERSITE=1
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONUTF8=1
 
-# Install system dependencies
+# Install ONLY system dependencies (no Python packages yet)
 RUN apt-get update && apt-get install -y \
     python3.10 \
     python3-pip \
@@ -43,45 +41,11 @@ RUN apt-get update && apt-get install -y \
 RUN update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.10 1 && \
     update-alternatives --install /usr/bin/python python /usr/bin/python3.10 1
 
-# Upgrade pip
+# Upgrade pip (only pip itself, nothing else)
 RUN python3 -m pip install --upgrade pip setuptools wheel
 
-# Install PyTorch 2.9.0 + CUDA 12.8 (supports all modern GPUs: Ada, Blackwell, and beyond)
-RUN echo "Installing PyTorch ${TORCH_VERSION} with CUDA ${CUDA_VERSION}..." && \
-    pip3 install --no-cache-dir \
-        --index-url ${TORCH_INDEX_URL} \
-        --extra-index-url https://pypi.org/simple \
-        torch==${TORCH_VERSION}+${CUDA_TAG} \
-        torchvision==${TORCHVISION_VERSION}+${CUDA_TAG} \
-        torchaudio==${TORCHAUDIO_VERSION}+${CUDA_TAG}
-
-# Fetch and install ComfyUI's requirements.txt from GitHub
-RUN wget -O /tmp/comfyui-requirements.txt \
-    https://raw.githubusercontent.com/comfyanonymous/ComfyUI/master/requirements.txt && \
-    pip3 install --no-cache-dir -r /tmp/comfyui-requirements.txt && \
-    rm /tmp/comfyui-requirements.txt
-
-# Install additional dependencies (xformers, performance optimizations)
-# Note: Skip xformers to avoid PyTorch version conflicts - ComfyUI will use built-in attention
-# Note: transformers and huggingface-hub versions are managed by ComfyUI's requirements.txt
-RUN echo "Installing accelerate..." && \
-    pip3 install --no-cache-dir accelerate
-
-# Install Triton for Linux (already built-in for CUDA-enabled PyTorch on Linux)
-# Note: triton-windows is Windows-only, Linux uses triton from PyTorch
-RUN pip3 install --no-cache-dir triton || echo "Triton install skipped (may be bundled with PyTorch)"
-
-# Install SageAttention (performance optimization)
-# Try prebuilt wheel first, fallback to source if needed
-RUN pip3 install --no-cache-dir \
-    https://github.com/thu-ml/SageAttention/releases/download/v2.2.0/sageattention-2.2.0-py3-none-any.whl \
-    || pip3 install --no-cache-dir "git+https://github.com/thu-ml/SageAttention.git@v2.2.0" \
-    || echo "SageAttention install failed - optional performance optimization"
-
-# Install hf_transfer for faster HuggingFace downloads
-RUN pip3 install --no-cache-dir hf_transfer
-
-# Install handler dependencies
+# Install ONLY handler's core dependencies (small, needed for container runtime)
+# PyTorch, ComfyUI deps, etc. will install to volume in start.sh
 WORKDIR /app
 COPY requirements.txt .
 RUN pip3 install --no-cache-dir -r requirements.txt
@@ -107,7 +71,7 @@ ENV COMFY_API_URL=http://127.0.0.1:8188
 ENV COMFYUI_PATH=/comfyui
 ENV RUN_MODE=production
 
-# Enable hf_transfer for faster HuggingFace downloads (optional but recommended)
+# Enable hf_transfer for faster HuggingFace downloads
 ENV HF_HUB_ENABLE_HF_TRANSFER=1
 
 # Expose ports
@@ -116,7 +80,7 @@ EXPOSE 8000 8188 8888
 # Labels
 LABEL cuda_version="${CUDA_VERSION}"
 LABEL pytorch_version="${TORCH_VERSION}"
-LABEL description="ComfyUI + RunPod Handler - Universal GPU Support"
+LABEL description="ComfyUI + RunPod Handler - Minimal Shell (Volume-First Architecture)"
 
 # Healthcheck
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
