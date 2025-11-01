@@ -493,12 +493,8 @@ if [ "$SKIP_INSTALL" = false ]; then
     fi
 fi
 
-# Always check for orphaned node dependencies (even when SHA matches)
-# This ensures nodes collected over time have their dependencies installed
-if [ -f "/app/install_nodes.py" ] && [ -d "$COMFYUI_PATH/custom_nodes" ]; then
-    # Orphaned nodes check removed - batch UV installation in Phase 2
-    # already handles all dependencies for nodes in config.yml
-fi
+# Orphaned nodes check removed - batch UV installation in Phase 2
+# already handles all dependencies for nodes in config.yml
 
 # Check GPU availability
 echo "Checking GPU..."
