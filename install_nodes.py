@@ -423,55 +423,72 @@ class NodeInstaller:
         return requirements_files
 
     def _batch_install_dependencies(self, requirements_files: List[Path]) -> Tuple[bool, str]:
-        """Install all dependencies from multiple requirements files in one UV command"""
+        """Install all dependencies from multiple requirements files in batches of 10"""
         if not requirements_files:
             return True, "no requirements files found"
 
         try:
             import tempfile
-
-            # Create a temporary combined requirements file
-            with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False) as combined:
-                # Read all requirements files and combine them
-                seen_requirements = set()
-                for req_file in requirements_files:
-                    with open(req_file, 'r') as f:
-                        for line in f:
-                            line = line.strip()
-                            # Skip comments and empty lines
-                            if line and not line.startswith('#'):
-                                # Normalize the requirement (ignore version for deduplication key)
-                                req_key = line.split('==')[0].split('>=')[0].split('<=')[0].split('>')[0].split('<')[0].strip()
-                                # Keep the full line with version
-                                if req_key not in seen_requirements:
-                                    combined.write(line + '\n')
-                                    seen_requirements.add(req_key)
-
-                combined_path = combined.name
-
-            # Install all dependencies with one UV command
-            print(f"  [PKG] Batch installing dependencies from {len(requirements_files)} node(s)...", flush=True)
-            print(f"      Total unique packages: {len(seen_requirements)}", flush=True)
-            print(f"      UV will show live download progress below:\n", flush=True)
-
-            # Don't capture output to show UV's native progress bars
-            result = subprocess.run(
-                ['uv', 'pip', 'install', '--system', '--no-cache', '-r', combined_path],
-                timeout=1200  # 20 minutes for large batch
-            )
-
-            # Clean up temp file
             import os
-            os.unlink(combined_path)
 
-            if result.returncode != 0:
-                return False, f"UV install failed with exit code {result.returncode}"
+            # Collect and deduplicate all requirements
+            seen_keys = set()
+            all_requirements = []
 
-            print(f"\n      [OK] Batch installation complete!\n", flush=True)
-            return True, f"batch installed {len(seen_requirements)} packages"
+            for req_file in requirements_files:
+                with open(req_file, 'r') as f:
+                    for line in f:
+                        line = line.strip()
+                        # Skip comments and empty lines
+                        if line and not line.startswith('#'):
+                            # Normalize the requirement (ignore version for deduplication key)
+                            req_key = line.split('==')[0].split('>=')[0].split('<=')[0].split('>')[0].split('<')[0].strip()
+                            # Keep the full line with version
+                            if req_key not in seen_keys:
+                                all_requirements.append(line)
+                                seen_keys.add(req_key)
+
+            total_packages = len(all_requirements)
+            batch_size = 10
+            num_batches = (total_packages + batch_size - 1) // batch_size
+
+            print(f"  [PKG] Batch installing dependencies from {len(requirements_files)} node(s)...", flush=True)
+            print(f"      Total unique packages: {total_packages}", flush=True)
+            print(f"      Installing in {num_batches} batches of {batch_size} packages\n", flush=True)
+
+            # Install in batches of 10
+            for batch_idx in range(num_batches):
+                start_idx = batch_idx * batch_size
+                end_idx = min(start_idx + batch_size, total_packages)
+                batch = all_requirements[start_idx:end_idx]
+
+                print(f"  [PKG] Batch {batch_idx + 1}/{num_batches} ({len(batch)} packages)...", flush=True)
+
+                # Create temporary requirements file for this batch
+                with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False) as batch_file:
+                    for req in batch:
+                        batch_file.write(req + '\n')
+                    batch_path = batch_file.name
+
+                # Install this batch
+                result = subprocess.run(
+                    ['uv', 'pip', 'install', '--system', '--no-cache', '-r', batch_path],
+                    timeout=600  # 10 minutes per batch
+                )
+
+                # Clean up temp file
+                os.unlink(batch_path)
+
+                if result.returncode != 0:
+                    return False, f"UV install failed on batch {batch_idx + 1}/{num_batches} (exit code {result.returncode})"
+
+                print(f"      [OK] Batch {batch_idx + 1}/{num_batches} complete!\n", flush=True)
+
+            print(f"  [OK] All batches complete! Installed {total_packages} packages\n", flush=True)
+            return True, f"batch installed {total_packages} packages in {num_batches} batches"
 
         except subprocess.TimeoutExpired:
-            return False, "TIMEOUT (batch install took >20 min)"
+            return False, "TIMEOUT (batch install took >10 min)"
         except Exception as e:
             return False, str(e)[:500]
 
