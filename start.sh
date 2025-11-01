@@ -427,7 +427,7 @@ if [ "$SKIP_INSTALL" = false ]; then
                 python3 /app/install_nodes.py \
                     --config "$CONFIG_FILE" \
                     --comfyui-dir "$COMFYUI_PATH" \
-                    --max-workers 4 \
+                    --max-workers 2 \
                     || INSTALL_EXIT_CODE=$?
 
                 if [ "${INSTALL_EXIT_CODE:-0}" -eq 0 ]; then
