@@ -452,11 +452,11 @@ class NodeInstaller:
             # Install all dependencies with one UV command
             print(f"  [PKG] Batch installing dependencies from {len(requirements_files)} node(s)...", flush=True)
             print(f"      Total unique packages: {len(seen_requirements)}", flush=True)
+            print(f"      UV will show live download progress below:\n", flush=True)
 
+            # Don't capture output to show UV's native progress bars
             result = subprocess.run(
                 ['uv', 'pip', 'install', '--system', '--no-cache', '-r', combined_path],
-                capture_output=True,
-                text=True,
                 timeout=1200  # 20 minutes for large batch
             )
 
@@ -465,8 +465,9 @@ class NodeInstaller:
             os.unlink(combined_path)
 
             if result.returncode != 0:
-                return False, result.stderr.strip()[:500]
+                return False, f"UV install failed with exit code {result.returncode}"
 
+            print(f"\n      [OK] Batch installation complete!\n", flush=True)
             return True, f"batch installed {len(seen_requirements)} packages"
 
         except subprocess.TimeoutExpired:
