@@ -175,6 +175,12 @@ class NodeInstaller:
         # Check if already exists
         if node_dir.exists() and not self.force:
             if self._check_version(node_dir, entry.version):
+                # Node exists at correct version, but still ensure dependencies are installed
+                # (they might be missing after container rebuild)
+                if not self.skip_deps:
+                    dep_success, dep_msg = self._install_dependencies(entry, node_dir)
+                    if not dep_success:
+                        return False, f"✗ {entry.repo_name}: {dep_msg}"
                 return True, f"✓ {entry.repo_name} (already at {entry.version})"
             else:
                 # Exists but wrong version - update it
