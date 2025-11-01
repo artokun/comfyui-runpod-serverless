@@ -180,15 +180,15 @@ class NodeInstaller:
                 if not self.skip_deps:
                     dep_success, dep_msg = self._install_dependencies(entry, node_dir)
                     if not dep_success:
-                        return False, f"✗ {entry.repo_name}: {dep_msg}"
-                return True, f"✓ {entry.repo_name} (already at {entry.version})"
+                        return False, f"[X] {entry.repo_name}: {dep_msg}"
+                return True, f"[OK] {entry.repo_name} (already at {entry.version})"
             else:
                 # Exists but wrong version - update it
-                print(f"  🔄 Updating {entry.repo_name}...", flush=True)
+                print(f"  [UPD] Updating {entry.repo_name}...", flush=True)
                 return self._update_node(entry, node_dir)
 
         # Clone the repository
-        print(f"  📥 Installing {entry.repo_name}...", flush=True)
+        print(f"  [DL] Installing {entry.repo_name}...", flush=True)
         return self._clone_node(entry, node_dir)
 
     def _clone_node(self, entry: NodeEntry, node_dir: Path) -> Tuple[bool, str]:
@@ -207,25 +207,25 @@ class NodeInstaller:
 
             if result.returncode != 0:
                 error_msg = result.stderr.strip()[:200]
-                return False, f"❌ INSTALL FAILED: {entry.repo_name} (clone error: {error_msg})"
+                return False, f"[ERR] INSTALL FAILED: {entry.repo_name} (clone error: {error_msg})"
 
             # Checkout specific version
             success, msg = self._checkout_version(entry, node_dir)
             if not success:
-                return False, f"❌ INSTALL FAILED: {msg}"
+                return False, f"[ERR] INSTALL FAILED: {msg}"
 
             # Install dependencies
             if not self.skip_deps:
                 dep_success, dep_msg = self._install_dependencies(entry, node_dir)
                 if not dep_success:
-                    return False, f"❌ INSTALL FAILED: {entry.repo_name} (dependencies: {dep_msg})"
+                    return False, f"[ERR] INSTALL FAILED: {entry.repo_name} (dependencies: {dep_msg})"
 
-            return True, f"✓ {entry.repo_name} @ {entry.version}"
+            return True, f"[OK] {entry.repo_name} @ {entry.version}"
 
         except subprocess.TimeoutExpired:
-            return False, f"❌ INSTALL FAILED: {entry.repo_name} (TIMEOUT after 5 min cloning)"
+            return False, f"[ERR] INSTALL FAILED: {entry.repo_name} (TIMEOUT after 5 min cloning)"
         except Exception as e:
-            return False, f"❌ INSTALL FAILED: {entry.repo_name} ({str(e)[:200]})"
+            return False, f"[ERR] INSTALL FAILED: {entry.repo_name} ({str(e)[:200]})"
 
     def _update_node(self, entry: NodeEntry, node_dir: Path) -> Tuple[bool, str]:
         """Update an existing node to a different version"""
@@ -243,12 +243,12 @@ class NodeInstaller:
 
             if result.returncode != 0:
                 error_msg = result.stderr.strip()[:200]
-                return False, f"❌ UPDATE FAILED: {entry.repo_name} (fetch error: {error_msg})"
+                return False, f"[ERR] UPDATE FAILED: {entry.repo_name} (fetch error: {error_msg})"
 
             # Checkout specific version
             success, msg = self._checkout_version(entry, node_dir)
             if not success:
-                return False, f"❌ UPDATE FAILED: {msg}"
+                return False, f"[ERR] UPDATE FAILED: {msg}"
 
             # Update submodules
             subprocess.run(
@@ -261,14 +261,14 @@ class NodeInstaller:
             if not self.skip_deps:
                 dep_success, dep_msg = self._install_dependencies(entry, node_dir)
                 if not dep_success:
-                    return False, f"⚠️ PARTIAL UPDATE: {entry.repo_name} @ {entry.version} (updated but dependencies failed: {dep_msg})"
+                    return False, f"[WARN] PARTIAL UPDATE: {entry.repo_name} @ {entry.version} (updated but dependencies failed: {dep_msg})"
 
-            return True, f"✓ {entry.repo_name} @ {entry.version} (updated)"
+            return True, f"[OK] {entry.repo_name} @ {entry.version} (updated)"
 
         except subprocess.TimeoutExpired:
-            return False, f"❌ UPDATE FAILED: {entry.repo_name} (TIMEOUT)"
+            return False, f"[ERR] UPDATE FAILED: {entry.repo_name} (TIMEOUT)"
         except Exception as e:
-            return False, f"❌ UPDATE FAILED: {entry.repo_name} ({str(e)[:200]})"
+            return False, f"[ERR] UPDATE FAILED: {entry.repo_name} ({str(e)[:200]})"
 
     def _checkout_version(self, entry: NodeEntry, node_dir: Path) -> Tuple[bool, str]:
         """Checkout specific version in a git repository"""
@@ -392,7 +392,7 @@ class NodeInstaller:
 
         try:
             # Always show dependency installation (not just in verbose mode)
-            print(f"    📦 Installing dependencies for {entry.repo_name}...", flush=True)
+            print(f"    [PKG] Installing dependencies for {entry.repo_name}...", flush=True)
 
             # Using uv for 10-100x faster downloads with parallel connections
             result = subprocess.run(
@@ -412,25 +412,117 @@ class NodeInstaller:
         except Exception as e:
             return False, str(e)[:200]  # Truncate long errors
 
+    def _collect_all_requirements(self, entries: List[NodeEntry]) -> List[Path]:
+        """Collect all requirements.txt files from node directories"""
+        requirements_files = []
+        for entry in entries:
+            node_dir = self.custom_nodes_dir / entry.repo_name
+            req_file = node_dir / "requirements.txt"
+            if req_file.exists():
+                requirements_files.append(req_file)
+        return requirements_files
+
+    def _batch_install_dependencies(self, requirements_files: List[Path]) -> Tuple[bool, str]:
+        """Install all dependencies from multiple requirements files in one UV command"""
+        if not requirements_files:
+            return True, "no requirements files found"
+
+        try:
+            import tempfile
+
+            # Create a temporary combined requirements file
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False) as combined:
+                # Read all requirements files and combine them
+                seen_requirements = set()
+                for req_file in requirements_files:
+                    with open(req_file, 'r') as f:
+                        for line in f:
+                            line = line.strip()
+                            # Skip comments and empty lines
+                            if line and not line.startswith('#'):
+                                # Normalize the requirement (ignore version for deduplication key)
+                                req_key = line.split('==')[0].split('>=')[0].split('<=')[0].split('>')[0].split('<')[0].strip()
+                                # Keep the full line with version
+                                if req_key not in seen_requirements:
+                                    combined.write(line + '\n')
+                                    seen_requirements.add(req_key)
+
+                combined_path = combined.name
+
+            # Install all dependencies with one UV command
+            print(f"  [PKG] Batch installing dependencies from {len(requirements_files)} node(s)...", flush=True)
+            print(f"      Total unique packages: {len(seen_requirements)}", flush=True)
+
+            result = subprocess.run(
+                ['uv', 'pip', 'install', '--system', '--no-cache', '-r', combined_path],
+                capture_output=True,
+                text=True,
+                timeout=1200  # 20 minutes for large batch
+            )
+
+            # Clean up temp file
+            import os
+            os.unlink(combined_path)
+
+            if result.returncode != 0:
+                return False, result.stderr.strip()[:500]
+
+            return True, f"batch installed {len(seen_requirements)} packages"
+
+        except subprocess.TimeoutExpired:
+            return False, "TIMEOUT (batch install took >20 min)"
+        except Exception as e:
+            return False, str(e)[:500]
+
+    def _run_install_script(self, entry: NodeEntry, node_dir: Path) -> Tuple[bool, str]:
+        """Run install.py script if it exists in the node directory"""
+        install_script = node_dir / "install.py"
+
+        if not install_script.exists():
+            return True, "no install script"
+
+        try:
+            # Run install.py in the node directory with relative path
+            result = subprocess.run(
+                ['python', 'install.py'],
+                cwd=str(node_dir),
+                capture_output=True,
+                text=True,
+                timeout=300  # 5 minutes timeout
+            )
+
+            if result.returncode != 0:
+                return False, f"install script failed: {result.stderr.strip()[:200]}"
+
+            return True, "install script completed"
+
+        except subprocess.TimeoutExpired:
+            return False, "install script TIMEOUT (>5 min)"
+        except Exception as e:
+            return False, f"install script error: {str(e)[:200]}"
+
     def install_all(self, entries: List[NodeEntry], max_workers: int = 4) -> Dict[str, int]:
-        """Install all node entries in parallel"""
+        """Install all node entries using optimized batch installation"""
         if not entries:
             return {"installed": 0, "skipped": 0, "failed": 0}
 
         print(f"\n{'='*70}")
-        print(f"  Installing {len(entries)} custom node(s) ({max_workers} parallel workers)")
+        print(f"  Installing {len(entries)} custom node(s) - BATCH MODE")
         print(f"  Target: {self.custom_nodes_dir}")
         print(f"{'='*70}\n")
 
         # Ensure custom_nodes directory exists
         self.custom_nodes_dir.mkdir(parents=True, exist_ok=True)
 
-        # Process entries in parallel
+        # PHASE 1: Clone all repos in parallel (without installing deps)
+        print(f"  PHASE 1: Cloning repositories ({max_workers} parallel workers)...")
+        cloned_entries = []
+        skip_deps_backup = self.skip_deps
+        self.skip_deps = True  # Temporarily skip deps during cloning
+
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            # Submit all tasks
             future_to_entry = {executor.submit(self.install_entry, entry): entry for entry in entries}
 
-            # Collect results as they complete
             for future in as_completed(future_to_entry):
                 entry = future_to_entry[future]
                 try:
@@ -441,12 +533,60 @@ class NodeInstaller:
                         if "already" in message or "skipped" in message:
                             self.skipped += 1
                         else:
+                            cloned_entries.append(entry)
                             self.installed += 1
                     else:
                         self.failed += 1
                 except Exception as e:
-                    print(f"  ❌ INSTALL FAILED: {entry.repo_name} (exception: {str(e)[:200]})")
+                    print(f"  [ERR] CLONE FAILED: {entry.repo_name} (exception: {str(e)[:200]})")
                     self.failed += 1
+
+        self.skip_deps = skip_deps_backup
+
+        # PHASE 2: Batch install ALL dependencies with one UV command
+        if not self.skip_deps and cloned_entries:
+            print(f"\n  PHASE 2: Batch installing dependencies...")
+            requirements_files = self._collect_all_requirements(entries)
+
+            if requirements_files:
+                success, msg = self._batch_install_dependencies(requirements_files)
+                if success:
+                    print(f"      [OK] {msg}")
+                else:
+                    print(f"      [ERR] Batch install failed: {msg}")
+                    # Don't fail the whole process, continue with install scripts
+            else:
+                print(f"      [INFO] No requirements.txt files found")
+
+        # PHASE 3: Run all install.py scripts in parallel
+        print(f"\n  PHASE 3: Running install scripts...")
+        install_script_count = 0
+
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            future_to_entry = {}
+
+            for entry in entries:
+                node_dir = self.custom_nodes_dir / entry.repo_name
+                install_script = node_dir / "install.py"
+
+                if install_script.exists():
+                    future = executor.submit(self._run_install_script, entry, node_dir)
+                    future_to_entry[future] = entry
+                    install_script_count += 1
+
+            if install_script_count > 0:
+                for future in as_completed(future_to_entry):
+                    entry = future_to_entry[future]
+                    try:
+                        success, msg = future.result()
+                        if success:
+                            print(f"      [OK] {entry.repo_name}: {msg}")
+                        else:
+                            print(f"      [ERR] {entry.repo_name}: {msg}")
+                    except Exception as e:
+                        print(f"      [ERR] {entry.repo_name}: install script exception: {str(e)[:200]}")
+            else:
+                print(f"      [INFO] No install scripts to run")
 
         print(f"\n{'='*70}")
         print(f"  Summary: {self.installed} installed, {self.skipped} skipped, {self.failed} failed")
@@ -496,11 +636,11 @@ class NodeInstaller:
             requirements_file = node_dir / "requirements.txt"
 
             if not requirements_file.exists():
-                print(f"  ✓ {node_dir.name} (no requirements)")
+                print(f"  [OK] {node_dir.name} (no requirements)")
                 continue
 
             try:
-                print(f"  📦 Installing dependencies for {node_dir.name}...", flush=True)
+                print(f"  [PKG] Installing dependencies for {node_dir.name}...", flush=True)
 
                 # Using uv for 10-100x faster downloads with parallel connections
                 result = subprocess.run(
@@ -511,17 +651,17 @@ class NodeInstaller:
                 )
 
                 if result.returncode != 0:
-                    print(f"  ✗ {node_dir.name} (dependencies failed: {result.stderr.strip()[:100]})")
+                    print(f"  [X] {node_dir.name} (dependencies failed: {result.stderr.strip()[:100]})")
                     deps_failed += 1
                 else:
-                    print(f"  ✓ {node_dir.name} (dependencies installed)")
+                    print(f"  [OK] {node_dir.name} (dependencies installed)")
                     deps_installed += 1
 
             except subprocess.TimeoutExpired:
-                print(f"  ✗ {node_dir.name} (TIMEOUT installing dependencies)")
+                print(f"  [X] {node_dir.name} (TIMEOUT installing dependencies)")
                 deps_failed += 1
             except Exception as e:
-                print(f"  ✗ {node_dir.name} (error: {str(e)[:100]})")
+                print(f"  [X] {node_dir.name} (error: {str(e)[:100]})")
                 deps_failed += 1
 
         print(f"\n{'='*70}")
@@ -635,7 +775,7 @@ def main():
         print(f"  ERRORS ({len(file_parser.errors)})")
         print(f"{'='*70}")
         for error in file_parser.errors:
-            print(f"  ✗ {error}")
+            print(f"  [X] {error}")
         print()
         return 1
 
@@ -650,10 +790,10 @@ def main():
 
     # Show what we found
     if not entries:
-        print("\n✓ No custom nodes to install (all lines commented out or empty file)")
+        print("\n[OK] No custom nodes to install (all lines commented out or empty file)")
         return 0
 
-    print(f"\n✓ Found {len(entries)} custom node(s) to install")
+    print(f"\n[OK] Found {len(entries)} custom node(s) to install")
 
     # Group by version type for display
     by_version = {"latest": [], "nightly": [], "specific": []}
@@ -667,14 +807,14 @@ def main():
 
     print(f"\nBreakdown:")
     if by_version["latest"]:
-        print(f"  • Latest stable: {len(by_version['latest'])} node(s)")
+        print(f"  - Latest stable: {len(by_version['latest'])} node(s)")
     if by_version["nightly"]:
-        print(f"  • Nightly builds: {len(by_version['nightly'])} node(s)")
+        print(f"  - Nightly builds: {len(by_version['nightly'])} node(s)")
     if by_version["specific"]:
-        print(f"  • Specific versions: {len(by_version['specific'])} node(s)")
+        print(f"  - Specific versions: {len(by_version['specific'])} node(s)")
 
     if args.validate_only:
-        print("\n✓ Validation complete!")
+        print("\n[OK] Validation complete!")
         return 0
 
     if args.dry_run:
