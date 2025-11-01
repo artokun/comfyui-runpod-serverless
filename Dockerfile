@@ -62,9 +62,8 @@ COPY install_nodes.py .
 COPY test_input.json .
 COPY apply_config.sh .
 
-# Copy unified config file and documentation
+# Copy unified config file
 COPY config.yml .
-COPY CONFIG_MANAGEMENT.md .
 
 RUN chmod +x /app/start.sh /app/entrypoint.sh /app/download_models.py /app/install_nodes.py /app/apply_config.sh
 
