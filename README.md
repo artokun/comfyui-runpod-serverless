@@ -5,7 +5,7 @@
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![Docker](https://img.shields.io/badge/docker-ready-brightgreen.svg)](https://www.docker.com/)
 
-Run ComfyUI locally with a RunPod-compatible API handler, then deploy to RunPod serverless.
+Run ComfyUI locally with a RunPod-compatible API handler, then deploy to RunPod serverless or GPU pods.
 
 > **Open Source**: This project is open source and welcomes contributions! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
@@ -15,7 +15,7 @@ Run ComfyUI locally with a RunPod-compatible API handler, then deploy to RunPod 
 docker compose up
 ```
 
-**First run:** The initial startup takes ~3-5 minutes (downloads ComfyUI, installs custom nodes from `config.yml`, downloads models). Subsequent runs with the same config are ~30 seconds thanks to SHA-based caching.
+**First run:** Initial startup downloads ComfyUI, installs dependencies with **uv** (10-100x faster than pip!), and configures models/nodes from `config.yml`. First run ~2-3 minutes, subsequent runs ~10-30 seconds thanks to volume-first architecture and SHA-based caching.
 
 Open your browser:
 - **http://localhost:8188** - ComfyUI interface (design workflows)
@@ -26,50 +26,388 @@ Press `Ctrl+C` to stop.
 
 ## What You Get
 
-✅ ComfyUI auto-installs on first run (updateable, persistent)
-✅ Full web interface for workflow design
-✅ Jupyter Lab for config editing and file management
-✅ RunPod-compatible API handler
-✅ Same workflow format locally and in production
-✅ Universal GPU support (RTX 4090, RTX 5090, and beyond)
-✅ Fast warm starts with SHA-based config caching
-✅ Streaming logs in your terminal
-✅ Works on Mac, Linux, Windows
+✅ **Lightning-fast package installation** - uv package manager (10-100x faster than pip)
+✅ **Volume-first architecture** - Minimal 8.7GB container, everything persists on volume
+✅ **Universal GPU support** - PyTorch 2.9.0 + CUDA 12.8 (RTX 4090, RTX 5090, future GPUs)
+✅ **Blazing downloads** - hf_transfer for HuggingFace (100-200+ MB/s), parallel chunks for others
+✅ **ComfyUI auto-installs** on first run (updateable, persistent)
+✅ **Full web interface** for workflow design
+✅ **Jupyter Lab** for config editing and file management
+✅ **RunPod-compatible API** handler
+✅ **SHA-based config caching** - Skip reinstalls when config unchanged
+✅ **Works everywhere** - Mac, Linux, Windows
+
+## Table of Contents
+
+- [Deploy to RunPod](#deploy-to-runpod)
+  - [Serverless Endpoints (Production)](#-serverless-endpoints-production)
+  - [GPU Pods (Development)](#-gpu-pods-development)
+- [Configuration](#configuration)
+  - [Editing config.yml](#editing-configyml)
+  - [Applying Changes](#applying-changes)
+  - [config.yml Format](#configyml-format-reference)
+- [Local Development](#local-development)
+- [Architecture](#architecture)
+- [API Format](#api-format)
+- [Contributing](#contributing)
+
+---
 
 ## Deploy to RunPod
 
-**Choose Your Deployment Type:**
+### Choose Your Deployment Type
 
-### 🚀 Serverless Endpoints (Production)
-Auto-scaling API deployment with scale-to-zero cost savings:
-- **[RunPod Serverless Guide →](RUNPOD_ENDPOINTS.md)**
-- Container Image: `artokun/comfyui-runpod:latest`
-- Pay per execution, auto-scaling
-- Perfect for production APIs
-- Set `RUN_MODE=endpoint` for faster cold starts (skips Jupyter)
+**🚀 Serverless Endpoints** - Auto-scaling production APIs with scale-to-zero
+**🔧 GPU Pods** - Interactive development with Jupyter and SSH access
 
-### 🔧 GPU Pods (Development)
-Interactive development with Jupyter and SSH access:
-- **[RunPod Pods Guide →](RUNPOD_PODS.md)**
-- Container Image: `artokun/comfyui-runpod:latest`
-- Pay per hour, full control
-- Perfect for testing and workflow design
-- Includes Jupyter Lab on port 8888 (set `RUN_MODE=production`)
+---
 
-**Unified Image (All Modern GPUs):**
-- Single image with PyTorch 2.9.0 + CUDA 12.8
-- Supports RTX 4090 (Ada), RTX 5090 (Blackwell), and beyond
-- No separate tags needed - one image for all!
+## 🚀 Serverless Endpoints (Production)
 
-Images auto-deploy via GitHub Actions on every release.
+Deploy ComfyUI as a serverless API endpoint with auto-scaling and scale-to-zero cost savings.
 
-### Manual Deploy (Contributors)
+### Prerequisites
 
-```bash
-./deploy.sh          # Build and push unified image
+1. **RunPod Account** - Sign up at https://runpod.io
+2. **Payment Method** - Add to your RunPod account
+3. **Network Volume** - For persistent models/nodes (recommended)
+
+### Step 1: Create Template
+
+1. Go to https://runpod.io/console/serverless
+2. Click **"New Template"**
+3. Configure:
+
+```
+Name: ComfyUI Handler
+Container Image: artokun/comfyui-runpod:latest
+Container Disk: 20 GB
+
+Environment Variables (Optional - all have defaults):
+  RUN_MODE=endpoint              # Skips Jupyter for fast cold starts
+  # AUTO_UPDATE=false            # (default)
+  # COMFY_API_URL=http://127.0.0.1:8188  # (default)
+
+Expose HTTP Ports:
+  Leave blank (API-only)
+  Or: 8188 (for debugging ComfyUI UI)
 ```
 
+4. Click **"Save Template"**
+
+### Step 2: Create Network Volume
+
+1. Go to **Storage** → **Network Volumes**
+2. Click **"New Network Volume"**
+3. Configure:
+   - **Name:** `comfyui-volume`
+   - **Region:** Choose region with GPU availability
+   - **Size:** 100 GB (recommended for models + ComfyUI)
+4. Click **"Create"**
+
+**Why volume is required:**
+- ComfyUI installs to `/runpod-volume/ComfyUI` (persistent)
+- Models stored permanently (no re-download)
+- Custom nodes persist
+- Faster cold starts after first run
+
+### Step 3: Create Endpoint
+
+1. Go back to **Serverless**
+2. Click **"New Endpoint"**
+3. Configure:
+
+```
+Name: comfyui-production
+Select Template: ComfyUI Handler
+Select Network Volume: comfyui-volume
+
+GPUs:
+  ☑ RTX 4090 (or RTX 5090)
+  Min Workers: 0
+  Max Workers: 3
+
+Advanced:
+  Idle Timeout: 5 seconds
+  Execution Timeout: 600 seconds
+  Max Concurrent Requests: 1
+```
+
+4. Click **"Deploy"**
+
+### Step 4: Test Your Endpoint
+
+```bash
+export RUNPOD_ENDPOINT_ID="your-endpoint-id"
+export RUNPOD_API_KEY="your-api-key"
+
+curl -X POST "https://api.runpod.ai/v2/${RUNPOD_ENDPOINT_ID}/runsync" \
+  -H "Authorization: Bearer ${RUNPOD_API_KEY}" \
+  -H "Content-Type: application/json" \
+  -d @examples/example_request.json
+```
+
+### Cost Estimation (Serverless)
+
+**RTX 4090:**
+- Idle: $0.00/hour (scale to zero)
+- Active: ~$0.50-0.70/hour
+- Per workflow: ~$0.01-0.03
+
+**RTX 5090:**
+- Idle: $0.00/hour
+- Active: ~$1.50-2.00/hour
+- Per workflow: ~$0.01-0.07
+
+**Tips to reduce costs:**
+- Scale to zero (min workers: 0)
+- Set short idle timeout (5 seconds)
+- Batch multiple images
+- Use appropriate resolution
+
+---
+
+## 🔧 GPU Pods (Development)
+
+Deploy ComfyUI to RunPod GPU Pods for interactive development with Jupyter notebook access.
+
+### What are Pods?
+
+**Pods** are traditional GPU instances with:
+- ✅ SSH and Jupyter notebook access
+- ✅ Direct file system access
+- ✅ Interactive development
+- ✅ Pay-per-hour billing (running time only)
+
+**Use Pods for:** Development, testing, interactive ComfyUI design, experimenting
+**Use Serverless for:** Production APIs, auto-scaling, scale-to-zero cost savings
+
+### Quick Start (Pods)
+
+#### Step 1: Create Network Volume
+
+1. Go to https://runpod.io/console/storage
+2. Click **"New Network Volume"**
+3. Configure:
+   - **Name:** `comfyui-volume`
+   - **Region:** Choose region with RTX 4090/5090
+   - **Size:** 50 GB minimum
+4. Click **"Create"**
+
+#### Step 2: Deploy Pod
+
+1. Go to https://runpod.io/console/pods
+2. Click **"Deploy"** or **"GPU Pods"**
+3. Select GPU: **RTX 4090** ($0.50-0.70/hr) or **RTX 5090**
+4. Configure:
+   ```
+   Container Image: artokun/comfyui-runpod:latest
+   Container Disk: 50 GB
+   Volume Mount: comfyui-volume → /runpod-volume
+   Expose HTTP Ports: 8188, 8000, 8888
+
+   Environment Variables:
+   RUN_MODE=production  # Enables Jupyter Lab
+   ```
+5. Click **"Deploy"**
+
+#### Step 3: Access Your Pod
+
+Once deployed:
+- **Connect** button → Opens Jupyter notebook
+- **TCP Port Mappings** → External URLs for ports
+
+**Access points:**
+- **Port 8188** → ComfyUI web interface
+- **Port 8000** → RunPod handler API
+- **Port 8888** → Jupyter Lab
+
+### Cost Management (Pods)
+
+Pods bill **per second** while running:
+- RTX 4090: ~$0.50-0.70/hour
+- RTX 5090: ~$1.50-2.00/hour
+
+**Tip:** Stop pods when not in use! Your volume data persists.
+
+- **Stop:** Click "Stop" button (volume persists)
+- **Start:** Click "Start" button (restores from volume)
+- **Terminate:** Deletes pod (volume remains)
+
+---
+
 ## Configuration
+
+### Editing config.yml
+
+The `config.yml` file controls which models and custom nodes are installed. It's mounted as a volume, so **you can edit anytime without rebuilding the Docker image!**
+
+**Default config:**
+Minimal setup with SD 1.5 + ComfyUI Manager (~4GB) for fast builds.
+
+**Advanced example:**
+See `config.example.yml` for complete WAN Animate 2.2 setup with 11 models and 20+ nodes (~30GB).
+
+#### Method 1: Edit via Jupyter Lab (Recommended for RunPod)
+
+**Step 1:** Access Jupyter Lab
+- **Local:** http://localhost:8888
+- **RunPod Pod:** Port 8888 in pod connection info
+
+**Step 2:** Navigate to config.yml
+- **RunPod:** `/runpod-volume/config.yml` or `/workspace/config.yml`
+- **Local:** `/workspace/config.yml`
+
+**Step 3:** Edit and save (Ctrl+S or Cmd+S)
+
+```yaml
+models:
+  - url: https://huggingface.co/stabilityai/sdxl-vae/resolve/main/sdxl_vae.safetensors
+    destination: vae
+    optional: false
+
+nodes:
+  - url: https://github.com/Kosinkadink/ComfyUI-VideoHelperSuite.git
+    version: latest
+```
+
+**Step 4:** Apply changes (see [Applying Changes](#applying-changes) below)
+
+#### Method 2: Local Terminal (Development)
+
+```bash
+nano config.yml
+# or
+code config.yml  # VS Code
+```
+
+Then restart container:
+```bash
+docker compose restart
+```
+
+#### Method 3: Base64 Encoded (RunPod Endpoints)
+
+For **RunPod Endpoints** (serverless), set as environment variable:
+
+1. Prepare your `config.yml` file
+2. Encode at **https://www.base64encode.org/** (copy file, paste, ENCODE)
+3. Set in RunPod template settings:
+   ```bash
+   CONFIG_YML=<base64-encoded-string>
+   ```
+
+The container automatically decodes and applies on startup!
+
+**Configuration Priority:**
+1. 🥇 `CONFIG_YML` env var → Writes to volume (persistent)
+2. 🥈 `config.yml` on volume → Can be edited directly
+3. 🥉 Baked-in default → Fallback
+
+### Applying Changes
+
+After editing `config.yml`, run the apply script to install new models/nodes without restarting:
+
+**Via Jupyter Terminal:**
+```bash
+cd /app
+chmod +x apply_config.sh
+./apply_config.sh
+```
+
+**Via Docker:**
+```bash
+docker compose exec comfyui /app/apply_config.sh
+```
+
+**What it does:**
+- ✅ Installs new custom nodes
+- ✅ Downloads new models
+- ✅ Skips already installed nodes/models (fast!)
+
+**Then restart ComfyUI** (custom nodes require restart):
+- **RunPod Pods:** Stop and start pod from console
+- **Local:** `docker compose restart`
+
+### config.yml Format Reference
+
+#### Models Section
+
+```yaml
+models:
+  - url: https://huggingface.co/model.safetensors
+    destination: checkpoints  # Where to place the model
+    optional: false            # Skip if download fails?
+
+  - url: https://civitai.com/api/download/models/123456
+    destination: loras
+    optional: true
+```
+
+**Supported destinations:**
+- `checkpoints` - Main model checkpoints
+- `vae` - VAE models
+- `loras` - LoRA models
+- `controlnet` - ControlNet models
+- `clip_vision` - CLIP vision models
+- `embeddings` - Text embeddings
+- `upscale_models` - Upscaler models
+- `diffusion_models` - Diffusion models
+- `text_encoders` - Text encoder models
+
+#### Custom Nodes Section
+
+```yaml
+nodes:
+  - url: https://github.com/user/repo.git
+    version: latest     # Latest stable release (tag)
+
+  - url: https://github.com/user/repo.git
+    version: nightly    # Latest commit (bleeding edge)
+
+  - url: https://github.com/user/repo.git
+    version: v1.2.3     # Specific tag
+
+  - url: https://github.com/user/repo.git
+    version: abc1234    # Specific commit hash
+
+  - url: https://github.com/user/repo.git
+    version: main       # Specific branch
+```
+
+**Version options:**
+- `latest` - Latest stable release tag (recommended)
+- `nightly` - Latest commit on default branch
+- `v1.2.3` - Specific version tag
+- `abc1234` - Specific commit hash
+- `main` - Track a specific branch
+
+### Fast Warm Starts (SHA Caching)
+
+The container uses SHA256 hashing to detect config changes:
+
+1. **First run:** Calculates SHA of `config.yml`, installs everything, stores SHA
+2. **Subsequent runs:** Compares current SHA with stored SHA
+3. **If match:** Skips all downloads/installs (seconds instead of minutes!)
+4. **If different:** Applies updates and updates SHA
+
+**SHA file locations:**
+- RunPod: `/runpod-volume/.config-sha256`
+- Local: `/workspace/.config-sha256`
+
+**Force reinstall:**
+```bash
+rm /runpod-volume/.config-sha256  # RunPod
+rm /workspace/.config-sha256      # Local
+```
+
+This dramatically improves RunPod Endpoint cold start performance!
+
+---
+
+## Local Development
+
+### Environment Variables
 
 Optional: Enable auto-updates or mount existing models.
 
@@ -79,137 +417,63 @@ cp .env.example .env
 ```
 
 **Auto-Update:**
-Set `AUTO_UPDATE=true` in `.env` to automatically update ComfyUI on startup.
+```bash
+AUTO_UPDATE=true  # Update ComfyUI on startup
+```
 
 **Models Directory:**
-Uncomment and set `MODELS_PATH` in `.env` to mount your existing models.
-
-**Jupyter Password (Optional):**
-Set `JUPYTER_PASSWORD` in `.env` to enable password protection for Jupyter Lab:
 ```bash
-JUPYTER_PASSWORD=your_secure_password
+MODELS_PATH=/path/to/existing/models  # Mount existing models
 ```
+
+**Jupyter Password:**
+```bash
+JUPYTER_PASSWORD=your_secure_password  # Enable password protection
+```
+
 If not set, Jupyter Lab is accessible without authentication (default for local development).
 
-**How It Works:**
-- ComfyUI is auto-cloned to `./ComfyUI` on first run
-- Persistent across container rebuilds
-- Update anytime: `cd ComfyUI && git pull`
-- Or enable auto-updates with `AUTO_UPDATE=true`
+### Workflow Development
 
-**Models & Custom Nodes (No Rebuild Needed!):**
+#### 1. Design in ComfyUI
 
-The default `config.yml` includes **SD 1.5 + ComfyUI Manager** for fast setup (~4GB model).
+Open http://localhost:8188 and create your workflow visually.
 
-For advanced setups (WAN Animate 2.2, SDXL, etc.), copy `config.example.yml`:
+#### 2. Export for API
 
-```bash
-# Option 1: Use advanced example (WAN Animate 2.2 - 11 models, 20+ nodes)
-cp config.example.yml config.yml
-docker compose restart
+- Enable Dev Mode: Settings → Dev Mode
+- Save workflow: Save (API Format)
+- Save to `workflows/my_workflow.json`
 
-# Option 2: Edit default config manually
-nano config.yml
-docker compose restart
-
-# Option 3: Mix and match from example
-# Pick specific models/nodes from config.example.yml
-```
-
-**Configuration Files:**
-- `config.yml` - Active config (lightweight SD 1.5 default)
-- `config.example.yml` - Advanced reference (complete WAN Animate 2.2 setup)
-
-**Key Features:**
-- ✅ **Edit anytime** - No Docker rebuild needed
-- ✅ **Smart caching** - Only downloads new/missing models
-- ✅ **Lightning fast downloads** - hf_transfer acceleration for HuggingFace (100-200+ MB/s on gigabit)
-- ✅ **Parallel chunk downloads** - 8-thread acceleration for Civitai and other sources
-- ✅ **Lightweight default** - Fast first build (4GB vs 30GB+)
-- ✅ **Advanced example** - Complete WAN Animate setup available
-
-**Cloud Deployment (RunPod/AWS/GCP):**
-Override config via environment variable without rebuilding. **We recommend base64 encoding** to avoid formatting issues:
-
-**Method 1: Base64 Encoded (Recommended)**
-1. Prepare your `config.yml` file
-2. Encode at **[https://www.base64encode.org/](https://www.base64encode.org/)** (copy file, paste, ENCODE)
-3. Set in RunPod:
-```bash
-CONFIG_YML=bW9kZWxzOgogIC0gdXJsOiBodHRwczovL2h1Z2dpbmdmYWNlLmNvLy4uLi9tb2RlbC5zYWZldGVuc29ycwogICAgZGVzdGluYXRpb246IGNoZWNrcG9pbnRzCm5vZGVzOgogIC0gdXJsOiBodHRwczovL2dpdGh1Yi5jb20vLi4uL25vZGUuZ2l0CiAgICB2ZXJzaW9uOiBsYXRlc3Q=
-```
-
-**Method 2: Edit via Jupyter** (for live editing in Pods)
-- Access Jupyter at port 8888 (no password)
-- Navigate to `/workspace/config.yml` and edit
-- Run `apply_config.sh` to apply changes instantly:
-  ```bash
-  cd /app && ./apply_config.sh
-  ```
-- See **[CONFIG_MANAGEMENT.md](CONFIG_MANAGEMENT.md)** for detailed guide
-
-**Method 3: Plain YAML** (local only - has newline issues in RunPod)
-```bash
-CONFIG_YML=models:
-  - url: https://huggingface.co/.../model.safetensors
-    destination: checkpoints
-```
-
-Container automatically detects, decodes, and validates the config!
-
-**Quick Apply Script:**
-
-After editing `config.yml`, run `apply_config.sh` to instantly download models and install nodes without restarting:
+#### 3. Test via API
 
 ```bash
-# In Jupyter terminal or local terminal
-cd /app
-./apply_config.sh
+curl -X POST http://localhost:8000/runsync \
+  -H "Content-Type: application/json" \
+  -d @examples/example_request.json
 ```
 
-See **[CONFIG_MANAGEMENT.md](CONFIG_MANAGEMENT.md)** for the complete configuration management guide.
+Or with Python:
 
-## Directory Structure
+```python
+import requests
+import json
 
-```
-comfy-template/
-├── README.md                 # This file
-├── CLAUDE.md                 # Project instructions for Claude Code
-├── CONFIG_MANAGEMENT.md      # Configuration management guide
-├── docker-compose.yml        # Run with: docker compose up
-├── Dockerfile                # Single Dockerfile (universal GPU support)
-├── .env.example              # Configuration template
-│
-├── handler.py                # RunPod worker logic
-├── s3_upload.py              # S3 upload module
-├── requirements.txt          # Python dependencies
-├── start.sh                  # Container startup script (auto-install/update)
-├── test_input.json           # Local test input for RunPod SDK
-│
-├── build.sh                  # Build production image
-├── deploy.sh                 # Deploy to Docker Hub
-├── download_models.py        # Model downloader (auto-run by start.sh)
-├── install_nodes.py          # Custom nodes installer (auto-run by start.sh)
-├── apply_config.sh           # Apply config changes without restart
-├── config.yml                # Unified configuration (models + nodes)
-│
-├── workspace/                # Persistent workspace (local dev)
-│   └── ComfyUI/              # Auto-created on first run
-│       ├── main.py           # ComfyUI application
-│       ├── models/           # Model files
-│       ├── custom_nodes/     # Custom nodes
-│       └── output/           # Generated images
-│
-├── docs/                     # Documentation
-│   └── ...                   # Various guides
-│
-└── examples/                 # Examples and testing
-    ├── example_workflow.json # Sample workflow
-    ├── example_request.json  # Sample API request
-    └── test_local.py         # Test without Docker
+with open('examples/example_request.json') as f:
+    response = requests.post('http://localhost:8000/runsync', json=json.load(f))
+
+print(response.json())
 ```
 
-## Common Commands
+#### 4. Deploy to RunPod
+
+```bash
+./deploy.sh
+```
+
+Same workflows work immediately in production!
+
+### Common Commands
 
 ```bash
 # Start services (with logs)
@@ -225,7 +489,7 @@ docker compose down
 # Rebuild after changes
 docker compose up --build
 
-# Test locally without Docker (requires ComfyUI running)
+# Test locally without Docker
 python examples/test_local.py
 
 # Build for RunPod
@@ -235,63 +499,72 @@ python examples/test_local.py
 ./deploy.sh
 ```
 
-## Workflow Development
+---
 
-### 1. Design Workflow
-Open http://localhost:8188 and create your workflow visually.
+## Architecture
 
-### 2. Export for API
-- Enable Dev Mode: Settings → Dev Mode
-- Save workflow: Save (API Format)
-- Save to `workflows/my_workflow.json`
+### Volume-First Design
 
-### 3. Test via API
+**Container:** Minimal shell (~8.7GB) with CUDA runtime + system dependencies only
+**Volume:** All Python packages, PyTorch, ComfyUI, models, custom nodes (persistent)
 
-```bash
-curl -X POST http://localhost:8000/runsync \
-  -H "Content-Type: application/json" \
-  -d @examples/example_request.json
-```
+**Why?**
+- ✅ No wasted disk space from package duplication
+- ✅ True persistence across container rebuilds
+- ✅ Faster deployments (smaller images)
+- ✅ Easy updates without image rebuilds
 
-Or with Python:
+**How it works:**
+1. Container sets `PIP_TARGET=/workspace/python-packages` (volume)
+2. All packages install directly to volume using **uv** (10-100x faster than pip!)
+3. Container is stateless, volume holds everything important
+4. Rebuild container anytime, data persists!
 
-```python
-import requests
+### Package Manager: uv
 
-with open('examples/example_request.json') as f:
-    response = requests.post('http://localhost:8000/runsync', json=json.load(f))
+This project uses **uv** (https://github.com/astral-sh/uv), a Rust-based pip replacement that's **10-100x faster**:
 
-print(response.json())
-```
+- ✅ Parallel downloads across all your bandwidth
+- ✅ Resolves 166 packages in <1 second
+- ✅ Installs packages in milliseconds
+- ✅ Perfect for 2Gbps+ connections
 
-### 4. Deploy to RunPod
+Your downloads will fly at **100-200+ MB/s** instead of the old 15 MB/s with pip!
 
-```bash
-./deploy.sh
-```
+### Runtime Modes
 
-Configure in RunPod console - same workflows work immediately!
+Configure via `RUN_MODE` environment variable:
 
-## Documentation
+- **`development`** (default local) - ComfyUI + Handler + Jupyter Lab
+- **`production`** (RunPod Pods) - ComfyUI + Handler + Jupyter Lab
+- **`endpoint`** (RunPod Serverless) - ComfyUI + Handler only (skips Jupyter for fast cold starts)
 
-### Quick Start
-- **[RunPod Quickstart](RUNPOD_QUICKSTART.md)** ⚡ - Deploy to RunPod in 5 minutes
+### GPU Support
 
-### Deployment
-- **[Deployment Guide](docs/DEPLOYMENT.md)** - Overview of all deployment options
-- **[RunPod Deployment](docs/RUNPOD_DEPLOYMENT.md)** - Complete RunPod setup
-- **[Auto-Deploy](docs/AUTO_DEPLOY.md)** - Automated CI/CD with GitHub Actions
-- **[Docker Hub Setup](docs/DOCKER_HUB_SETUP.md)** - For forkers only
+**Universal Image** - One image for all modern NVIDIA GPUs:
+- CUDA 12.8
+- PyTorch 2.9.0+cu128
+- RTX 4090 (Ada, compute 8.9) ✓
+- RTX 5090 (Blackwell, compute 12.0) ✓
+- Future architectures supported out-of-the-box!
 
-### Configuration
-- **[Model Management](docs/MODEL_MANAGEMENT.md)** - Automatic model downloads
-- **[Custom Nodes](docs/CUSTOM_NODES.md)** - Installing custom nodes with version control
-- **[Docker Compose](docs/DOCKER_COMPOSE.md)** - Local development guide
+No architecture-specific builds needed!
 
-### Reference
-- **[RunPod Configuration](docs/RUNPOD_CONFIG.md)** - Endpoint settings
-- **[Testing Guide](docs/TESTING.md)** - Testing workflows and API
-- **[Installer Patterns](docs/INSTALLER_PATTERNS.md)** - Implementation details
+### Performance
+
+**Expected generation times on RTX 4090:**
+- SD 1.5: ~5-10 seconds
+- SDXL: ~20-30 seconds
+- FLUX: ~90-120 seconds
+
+RTX 5090 is 40-60% faster when available.
+
+**Download speeds:**
+- **HuggingFace:** 100-200+ MB/s (hf_transfer enabled)
+- **Civitai/Others:** Parallel 8-thread chunks
+- **PyPI packages:** Parallel downloads via uv
+
+---
 
 ## API Format
 
@@ -333,61 +606,47 @@ Configure in RunPod console - same workflows work immediately!
 }
 ```
 
-## Architecture
+---
 
-**Single Unified Dockerfile with Runtime Modes:**
+## Directory Structure
 
-The same Docker image works for all deployment scenarios, configured via `RUN_MODE` environment variable:
+```
+comfy-template/
+├── README.md                 # This file
+├── CLAUDE.md                 # Project instructions for Claude Code
+├── docker-compose.yml        # Run with: docker compose up
+├── Dockerfile                # Universal GPU support (all in one!)
+├── .env.example              # Configuration template
+│
+├── handler.py                # RunPod worker logic
+├── s3_upload.py              # S3 upload module
+├── requirements.txt          # Python dependencies
+├── start.sh                  # Container startup script
+├── entrypoint.sh             # Entrypoint script
+├── test_input.json           # Local test input for RunPod SDK
+│
+├── build.sh                  # Build production image
+├── deploy.sh                 # Deploy to Docker Hub
+├── download_models.py        # Model downloader
+├── install_nodes.py          # Custom nodes installer
+├── apply_config.sh           # Apply config changes without restart
+├── config.yml                # Unified configuration (models + nodes)
+│
+├── workspace/                # Persistent workspace (local dev)
+│   └── ComfyUI/              # Auto-created on first run
+│       ├── main.py           # ComfyUI application
+│       ├── models/           # Model files
+│       ├── custom_nodes/     # Custom nodes
+│       └── output/           # Generated images
+│
+├── docs/                     # Documentation
+└── examples/                 # Examples and testing
+    ├── example_workflow.json
+    ├── example_request.json
+    └── test_local.py
+```
 
-### Development Mode (`RUN_MODE=development`)
-- ComfyUI + Handler + Jupyter Lab
-- Auto-installs ComfyUI on first run
-- Persistent workspace directory
-- Perfect for local workflow design
-- Uses: `docker compose up` (default)
-
-### Production Mode (`RUN_MODE=production`)
-- ComfyUI + Handler + Jupyter Lab
-- Full environment for RunPod Pods
-- Jupyter on port 8888 for live editing
-- Perfect for interactive GPU pods
-
-### Endpoint Mode (`RUN_MODE=endpoint`)
-- ComfyUI + Handler only (no Jupyter)
-- Optimized for fast cold starts
-- Minimal overhead for serverless
-- Perfect for RunPod Serverless Endpoints
-
-**All modes use the same architecture** - lightweight handler (~3GB) connects to ComfyUI over HTTP. The unified build eliminates the need for separate images!
-
-## GPU Support
-
-**Universal Image** - Supports all modern NVIDIA GPUs:
-- CUDA 12.8
-- PyTorch 2.9.0+cu128
-- RTX 4090 (Ada, compute 8.9) ✓
-- RTX 5090 (Blackwell, compute 12.0) ✓
-- Future architectures supported out-of-the-box
-
-Single unified image eliminates architecture-specific builds!
-
-## Performance
-
-**Expected generation times on RTX 4090:**
-- SD 1.5: ~5-10 seconds
-- SDXL: ~20-30 seconds
-- FLUX: ~90-120 seconds
-
-Times vary based on resolution, steps, and model complexity.
-
-**Warm Start Optimization:**
-
-The container uses SHA256 hashing to detect config changes:
-- **First start**: Downloads models, installs nodes, stores config SHA (~2-5 minutes depending on config)
-- **Warm starts (config unchanged)**: Skips all downloads/installs entirely (~5-10 seconds)
-- **Config changed**: Only applies updates, then updates SHA
-
-This dramatically improves RunPod Endpoint performance where warm start time directly impacts response latency. The SHA file (`.config-sha256`) is stored on persistent volume.
+---
 
 ## Requirements
 
@@ -399,13 +658,15 @@ This dramatically improves RunPod Endpoint performance where warm start time dir
 **Production:**
 - Docker Hub account
 - RunPod account
-- Network volume with ComfyUI installed
+- Network volume (recommended)
 
 ## Platform Support
 
 - ✅ **Linux**: Full GPU support
 - ✅ **Windows**: Full GPU support (native or WSL2)
 - ⚠️ **Mac**: Works for workflow design, no GPU acceleration (use RunPod for generation)
+
+---
 
 ## Troubleshooting
 
@@ -429,7 +690,32 @@ netstat -ano | findstr "8188"   # Windows
 docker compose build --no-cache
 ```
 
-See [docs/DOCKER_COMPOSE.md](docs/DOCKER_COMPOSE.md) for more troubleshooting.
+### "ComfyUI not loading" (RunPod Pods)
+
+Check pod logs:
+1. Pod details → "Logs" tab
+2. Look for startup messages
+3. Ensure ports 8188, 8000, 8888 exposed
+
+### "Models downloading slowly"
+
+The scripts use:
+- ✅ **uv** for Python packages (10-100x faster)
+- ✅ **hf_transfer** for HuggingFace (100-200+ MB/s)
+- ✅ **8-thread parallel chunks** for Civitai
+
+If still slow, check your network connection.
+
+### "Custom node installation fails"
+
+Common causes:
+1. **Git URL typo** - Verify repository URL
+2. **Version doesn't exist** - Check repo for valid tags
+3. **Missing dependencies** - Some nodes need system packages
+
+Check error messages for details.
+
+---
 
 ## Examples
 
@@ -438,9 +724,11 @@ See `examples/` directory for:
 - Example API requests
 - Local testing without Docker
 
+---
+
 ## Contributing
 
-We welcome contributions! Please see our [Contributing Guidelines](CONTRIBUTING.md) for details on:
+We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for details on:
 
 - 🐛 **Reporting bugs**
 - ✨ **Proposing features**
@@ -469,21 +757,30 @@ docker compose up
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed instructions.
 
+---
+
 ## Community
 
 - **Issues**: [GitHub Issues](https://github.com/YOUR-USERNAME/comfyui-runpod-handler/issues)
 - **Discussions**: [GitHub Discussions](https://github.com/YOUR-USERNAME/comfyui-runpod-handler/discussions)
 - **Code of Conduct**: [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)
 
+---
+
 ## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
+---
+
 ## Credits
 
 - Built using [ComfyUI](https://github.com/comfyanonymous/ComfyUI) by comfyanonymous
-- Deployment patterns inspired by [WAN-ANIMATE](https://github.com/kijai/WAN-ANIMATE) and other production installers
+- Package management powered by [uv](https://github.com/astral-sh/uv) by Astral
+- Deployment patterns inspired by [WAN-ANIMATE](https://github.com/kijai/WAN-ANIMATE)
 - RunPod serverless infrastructure by [RunPod](https://www.runpod.io/)
+
+---
 
 ## Acknowledgments
 

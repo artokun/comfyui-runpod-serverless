@@ -70,7 +70,10 @@ if [ ! -f "$PYTHON_PACKAGES_DIR/.core-deps-installed" ]; then
     echo ""
 
     # Install PyTorch (will go to volume via PIP_TARGET)
-    pip3 install --no-cache-dir \
+    # Using uv for 10-100x faster downloads with parallel connections
+    # --index-strategy unsafe-best-match: Check all indexes for CUDA builds
+    uv pip install --system --no-cache \
+        --index-strategy unsafe-best-match \
         --index-url ${TORCH_INDEX_URL} \
         --extra-index-url https://pypi.org/simple \
         torch==${TORCH_VERSION}+${CUDA_TAG} \
@@ -90,7 +93,7 @@ if [ ! -f "$PYTHON_PACKAGES_DIR/.core-deps-installed" ]; then
     # Fetch and install ComfyUI requirements
     wget -O /tmp/comfyui-requirements.txt \
         https://raw.githubusercontent.com/comfyanonymous/ComfyUI/master/requirements.txt
-    pip3 install --no-cache-dir -r /tmp/comfyui-requirements.txt
+    uv pip install --system --no-cache -r /tmp/comfyui-requirements.txt
     rm /tmp/comfyui-requirements.txt
 
     echo "✓ ComfyUI dependencies installed"
@@ -99,19 +102,19 @@ if [ ! -f "$PYTHON_PACKAGES_DIR/.core-deps-installed" ]; then
     echo "Installing additional dependencies..."
 
     # Install accelerate
-    pip3 install --no-cache-dir accelerate
+    uv pip install --system --no-cache accelerate
 
     # Install triton
-    pip3 install --no-cache-dir triton || echo "Triton skipped (may be bundled)"
+    uv pip install --system --no-cache triton || echo "Triton skipped (may be bundled)"
 
     # Install SageAttention (performance optimization)
-    pip3 install --no-cache-dir \
+    uv pip install --system --no-cache \
         https://github.com/thu-ml/SageAttention/releases/download/v2.2.0/sageattention-2.2.0-py3-none-any.whl \
-        || pip3 install --no-cache-dir "git+https://github.com/thu-ml/SageAttention.git@v2.2.0" \
+        || uv pip install --system --no-cache "git+https://github.com/thu-ml/SageAttention.git@v2.2.0" \
         || echo "SageAttention skipped (optional)"
 
     # Install hf_transfer for faster downloads
-    pip3 install --no-cache-dir hf_transfer
+    uv pip install --system --no-cache hf_transfer
 
     echo "✓ Additional dependencies installed"
 
@@ -171,7 +174,7 @@ if [ ! -f "$COMFYUI_PATH/main.py" ]; then
 
     echo "Installing ComfyUI dependencies..."
     cd "$COMFYUI_PATH"
-    pip3 install -r requirements.txt --no-cache-dir
+    uv pip install --system --no-cache -r requirements.txt
 
     echo "✓ ComfyUI installed"
     echo ""
@@ -196,7 +199,7 @@ else
                 # Update dependencies if requirements.txt changed
                 if git diff --name-only "$CURRENT_COMMIT" "$NEW_COMMIT" 2>/dev/null | grep -q "requirements.txt"; then
                     echo "Updating dependencies..."
-                    pip3 install -r requirements.txt --upgrade --no-cache-dir
+                    uv pip install --system --no-cache --upgrade -r requirements.txt
                 fi
             else
                 echo "Already up to date"

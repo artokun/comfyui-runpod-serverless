@@ -375,9 +375,7 @@ class ModelDownloader:
                         revision=revision,
                         filename=filename,
                         cache_dir=None,  # Use default HF cache
-                        resume_download=True,
-                        local_dir=str(dest_dir),
-                        local_dir_use_symlinks=False  # Copy file, don't symlink
+                        local_dir=str(dest_dir)
                     )
 
                     # Verify the file was downloaded to the expected location

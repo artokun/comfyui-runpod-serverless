@@ -41,14 +41,16 @@ RUN apt-get update && apt-get install -y \
 RUN update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.10 1 && \
     update-alternatives --install /usr/bin/python python /usr/bin/python3.10 1
 
-# Upgrade pip (only pip itself, nothing else)
-RUN python3 -m pip install --upgrade pip setuptools wheel
+# Install uv (Rust-based pip replacement - 10-100x faster, parallel downloads)
+# https://github.com/astral-sh/uv
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh
+ENV PATH="/root/.local/bin:${PATH}"
 
 # Install ONLY handler's core dependencies (small, needed for container runtime)
 # PyTorch, ComfyUI deps, etc. will install to volume in start.sh
 WORKDIR /app
 COPY requirements.txt .
-RUN pip3 install --no-cache-dir -r requirements.txt
+RUN uv pip install --system --no-cache -r requirements.txt
 
 # Copy handler and startup files
 COPY handler.py .

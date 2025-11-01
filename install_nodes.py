@@ -394,8 +394,9 @@ class NodeInstaller:
             # Always show dependency installation (not just in verbose mode)
             print(f"    📦 Installing dependencies for {entry.repo_name}...", flush=True)
 
+            # Using uv for 10-100x faster downloads with parallel connections
             result = subprocess.run(
-                [sys.executable, '-m', 'pip', 'install', '-r', str(requirements_file)],
+                ['uv', 'pip', 'install', '--system', '--no-cache', '-r', str(requirements_file)],
                 capture_output=True,
                 text=True,
                 timeout=600  # Increased to 10 minutes for heavy packages
@@ -501,8 +502,9 @@ class NodeInstaller:
             try:
                 print(f"  📦 Installing dependencies for {node_dir.name}...", flush=True)
 
+                # Using uv for 10-100x faster downloads with parallel connections
                 result = subprocess.run(
-                    [sys.executable, '-m', 'pip', 'install', '-r', str(requirements_file)],
+                    ['uv', 'pip', 'install', '--system', '--no-cache', '-r', str(requirements_file)],
                     capture_output=True,
                     text=True,
                     timeout=600

@@ -39,6 +39,10 @@ Access locally: http://localhost:8188 (ComfyUI UI), http://localhost:8000 (API),
 
 ## Architecture
 
+**Volume-first design**: Minimal container (~8.7GB - CUDA runtime + system dependencies only). ALL Python packages (PyTorch, ComfyUI, dependencies) install directly to persistent volume via `PIP_TARGET`. No wasteful package copying between layers. True persistence - warm starts are instant.
+
+**uv package manager**: Replaced pip with uv (Rust-based, 10-100x faster). Parallel downloads, better dependency resolution. PyTorch downloads: 6.4 seconds for 166 packages vs minutes with pip. Utilizes full network bandwidth (100-200+ MB/s potential).
+
 **Single Dockerfile with auto-install**: ComfyUI clones to `./workspace/ComfyUI` (local) or `/runpod-volume/ComfyUI` (RunPod) on first run. Models and custom nodes auto-install from `config.yml` if configured. Fully persistent across restarts.
 
 **Runtime modes (RUN_MODE env var)**:
@@ -58,9 +62,9 @@ Access locally: http://localhost:8188 (ComfyUI UI), http://localhost:8000 (API),
 
 **Universal GPU support**: Single unified image with PyTorch 2.9.0 + CUDA 12.8 supports all modern NVIDIA GPUs (RTX 4090, RTX 5090, and beyond)
 
-**Performance optimizations**: Includes SageAttention v2.2.0, Triton, hf_transfer for 3-5x faster HuggingFace downloads (100-200 MB/s on gigabit connections).
+**Performance optimizations**: uv for package installs (10-100x faster), SageAttention v2.2.0, Triton, hf_transfer for 3-5x faster HuggingFace downloads (100-200 MB/s on gigabit connections).
 
-**Environment detection**: Uses `/runpod-volume` in RunPod, `MODELS_PATH` locally.
+**Environment detection**: Uses `/runpod-volume` in RunPod, `./workspace/` locally. All packages install to volume via `PIP_TARGET`.
 
 ## Key Files
 
@@ -87,7 +91,7 @@ cd /app
 ./apply_config.sh
 ```
 
-This instantly downloads models and installs custom nodes without restarting the container. See **[CONFIG_MANAGEMENT.md](CONFIG_MANAGEMENT.md)** for the complete guide.
+This instantly downloads models and installs custom nodes without restarting the container. See README.md "Configuration Management" section for the complete guide.
 
 ```yaml
 # Models section
@@ -154,7 +158,7 @@ nodes:
    ```
 5. Restart ComfyUI if needed
 
-See **[CONFIG_MANAGEMENT.md](CONFIG_MANAGEMENT.md)** for detailed instructions.
+See README.md "Configuration Management" section for detailed instructions.
 
 ### Method 4: Bake into Custom Image
 
@@ -217,7 +221,7 @@ pytest                               # Run tests
 - Tests: `tests/` directory (pytest framework, aim for >70% coverage)
 - Code style: Black, flake8, isort, mypy (enforced by pre-commit hooks)
 - CI/CD: GitHub Actions (`.github/workflows/`)
-- Docs: Update README.md and CLAUDE.md for user-facing changes
+- Docs: All documentation consolidated in README.md; update CLAUDE.md for AI assistant guidance
 
 **Commit format**: Follow [Conventional Commits](https://www.conventionalcommits.org/)
 - `feat:` - New feature
