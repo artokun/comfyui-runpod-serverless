@@ -5,11 +5,11 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-      target: final
     image: artokun/comfyui-runpod:latest
     container_name: comfyui
     environment:
       - NVIDIA_VISIBLE_DEVICES=all
+      - RUN_MODE=development  # Use 'development' for local, 'production' for RunPod
       - COMFYUI_PATH=/workspace/ComfyUI
       - AUTO_UPDATE=${AUTO_UPDATE:-false}  # Set to 'true' for auto-updates on startup
     ports:

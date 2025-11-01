@@ -41,6 +41,11 @@ Access locally: http://localhost:8188 (ComfyUI UI), http://localhost:8000 (API),
 
 **Single Dockerfile with auto-install**: ComfyUI clones to `./workspace/ComfyUI` (local) or `/runpod-volume/ComfyUI` (RunPod) on first run. Models and custom nodes auto-install from `config.yml` if configured. Fully persistent across restarts.
 
+**Runtime modes (RUN_MODE env var)**:
+- `development` (default for local) - ComfyUI + Handler + Jupyter Lab - full development environment
+- `production` (for RunPod Pods) - ComfyUI + Handler + Jupyter Lab - interactive GPU pods with Jupyter access
+- `endpoint` (for RunPod Serverless) - ComfyUI + Handler only - optimized for fast cold starts, skips Jupyter
+
 **Default configuration**: Minimal setup (SD 1.5 + ComfyUI Manager, ~4GB) for fast builds. Advanced setups (WAN Animate 2.2, ~30GB) available in `config.example.yml`.
 
 **Fast warm starts (SHA-based caching)**: Container calculates SHA256 hash of `config.yml` and stores it on persistent volume (`.config-sha256`). On subsequent starts, if SHA matches, model downloads and node installations are skipped entirely for instant warm starts. Critical for RunPod Endpoint performance where every second counts. To force reinstall, delete the SHA file.

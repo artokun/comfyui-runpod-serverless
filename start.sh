@@ -407,27 +407,33 @@ if [ "$ENVIRONMENT" = "runpod" ] && [ -d "/runpod-volume" ]; then
     echo ""
 fi
 
-# Start Jupyter in background
-echo "Starting Jupyter server on port 8888..."
+# Start Jupyter in background (skip in endpoint mode for fast cold starts)
+if [ "$RUN_MODE" != "endpoint" ] && [ "$RUN_MODE" != "serverless" ]; then
+    echo "Starting Jupyter server on port 8888..."
 
-# Configure Jupyter authentication
-JUPYTER_AUTH_ARGS=""
-if [ -n "$JUPYTER_PASSWORD" ]; then
-    echo "  🔒 Password protection enabled"
-    JUPYTER_AUTH_ARGS="--ServerApp.token='$JUPYTER_PASSWORD' --ServerApp.password=''"
+    # Configure Jupyter authentication
+    JUPYTER_AUTH_ARGS=""
+    if [ -n "$JUPYTER_PASSWORD" ]; then
+        echo "  🔒 Password protection enabled"
+        JUPYTER_AUTH_ARGS="--ServerApp.token='$JUPYTER_PASSWORD' --ServerApp.password=''"
+    else
+        echo "  🔓 No password required (set JUPYTER_PASSWORD env to enable)"
+        JUPYTER_AUTH_ARGS="--ServerApp.token='' --ServerApp.password=''"
+    fi
+
+    cd /app
+    jupyter lab --ip=0.0.0.0 --port=8888 --no-browser --allow-root \
+        $JUPYTER_AUTH_ARGS \
+        --ServerApp.allow_origin='*' \
+        --ServerApp.root_dir="$COMFYUI_PATH/.." &
+    JUPYTER_PID=$!
+    echo "  PID: ${JUPYTER_PID}"
+    echo ""
 else
-    echo "  🔓 No password required (set JUPYTER_PASSWORD env to enable)"
-    JUPYTER_AUTH_ARGS="--ServerApp.token='' --ServerApp.password=''"
+    echo "Skipping Jupyter (endpoint mode - optimized for cold starts)"
+    JUPYTER_PID=""
+    echo ""
 fi
-
-cd /app
-jupyter lab --ip=0.0.0.0 --port=8888 --no-browser --allow-root \
-    $JUPYTER_AUTH_ARGS \
-    --ServerApp.allow_origin='*' \
-    --ServerApp.root_dir="$COMFYUI_PATH/.." &
-JUPYTER_PID=$!
-echo "  PID: ${JUPYTER_PID}"
-echo ""
 
 # Start ComfyUI in background
 echo "Starting ComfyUI server on port 8188..."
@@ -474,19 +480,27 @@ echo ""
 echo "Services running:"
 echo "  • ComfyUI:      http://localhost:8188"
 echo "  • RunPod API:   http://localhost:8000"
-echo "  • Jupyter Lab:  http://localhost:8888"
+if [ -n "$JUPYTER_PID" ]; then
+    echo "  • Jupyter Lab:  http://localhost:8888"
+fi
 echo ""
 
 if [ "$ENVIRONMENT" = "local" ]; then
     echo "Local Development Mode:"
     echo "  1. Open http://localhost:8188 to design workflows"
-    echo "  2. Use Jupyter (port 8888) for testing and file management"
-    echo "  3. Test handler: Create workflows in examples/ directory"
+    if [ -n "$JUPYTER_PID" ]; then
+        echo "  2. Use Jupyter (port 8888) for testing and file management"
+        echo "  3. Test handler: Create workflows in examples/ directory"
+    else
+        echo "  2. Test handler: Create workflows in examples/ directory"
+    fi
     echo ""
 fi
 
 echo "Logs:"
-echo "  • Jupyter PID:  ${JUPYTER_PID}"
+if [ -n "$JUPYTER_PID" ]; then
+    echo "  • Jupyter PID:  ${JUPYTER_PID}"
+fi
 echo "  • ComfyUI PID:  ${COMFYUI_PID}"
 echo "  • Handler PID:  ${HANDLER_PID}"
 echo ""
@@ -500,7 +514,7 @@ shutdown() {
     echo "Shutting down services..."
     kill $HANDLER_PID 2>/dev/null || true
     kill $COMFYUI_PID 2>/dev/null || true
-    kill $JUPYTER_PID 2>/dev/null || true
+    [ -n "$JUPYTER_PID" ] && kill $JUPYTER_PID 2>/dev/null || true
     echo "Shutdown complete"
     exit 0
 }
@@ -509,7 +523,11 @@ shutdown() {
 trap shutdown SIGTERM SIGINT
 
 # Wait for processes
-wait $JUPYTER_PID $COMFYUI_PID $HANDLER_PID
+if [ -n "$JUPYTER_PID" ]; then
+    wait $JUPYTER_PID $COMFYUI_PID $HANDLER_PID
+else
+    wait $COMFYUI_PID $HANDLER_PID
+fi
 
 # If we get here, one of the processes died unexpectedly
 echo "⚠ A service has stopped unexpectedly!"

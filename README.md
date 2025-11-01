@@ -15,7 +15,7 @@ Run ComfyUI locally with a RunPod-compatible API handler, then deploy to RunPod 
 docker compose up
 ```
 
-**First run:** The initial startup takes 15-20 minutes (downloads ComfyUI, installs custom nodes from `config.yml`, downloads models). Subsequent runs with the same config are ~30 seconds thanks to SHA-based caching.
+**First run:** The initial startup takes ~3-5 minutes (downloads ComfyUI, installs custom nodes from `config.yml`, downloads models). Subsequent runs with the same config are ~30 seconds thanks to SHA-based caching.
 
 Open your browser:
 - **http://localhost:8188** - ComfyUI interface (design workflows)
@@ -46,6 +46,7 @@ Auto-scaling API deployment with scale-to-zero cost savings:
 - Container Image: `artokun/comfyui-runpod:latest`
 - Pay per execution, auto-scaling
 - Perfect for production APIs
+- Set `RUN_MODE=endpoint` for faster cold starts (skips Jupyter)
 
 ### 🔧 GPU Pods (Development)
 Interactive development with Jupyter and SSH access:
@@ -53,7 +54,7 @@ Interactive development with Jupyter and SSH access:
 - Container Image: `artokun/comfyui-runpod:latest`
 - Pay per hour, full control
 - Perfect for testing and workflow design
-- Includes Jupyter Lab on port 8888
+- Includes Jupyter Lab on port 8888 (set `RUN_MODE=production`)
 
 **Unified Image (All Modern GPUs):**
 - Single image with PyTorch 2.9.0 + CUDA 12.8
@@ -334,24 +335,30 @@ Configure in RunPod console - same workflows work immediately!
 
 ## Architecture
 
-**Single Dockerfile with Two Targets:**
+**Single Unified Dockerfile with Runtime Modes:**
 
-### Local Development (default target)
-- Lightweight handler (~3GB image)
-- ComfyUI auto-installed from filesystem
-- Persistent and updateable
-- Both ComfyUI UI and API handler
-- Uses: `docker compose up`
+The same Docker image works for all deployment scenarios, configured via `RUN_MODE` environment variable:
 
-### Production (production target)
-- Same lightweight handler (~3GB image)
-- Connects to pre-installed ComfyUI on RunPod network volume
-- Optimized for RunPod serverless
-- Uses: `./deploy.sh ada` (automatically targets production)
+### Development Mode (`RUN_MODE=development`)
+- ComfyUI + Handler + Jupyter Lab
+- Auto-installs ComfyUI on first run
+- Persistent workspace directory
+- Perfect for local workflow design
+- Uses: `docker compose up` (default)
 
-**Both use the same architecture** - handler connects to ComfyUI over HTTP. The only differences are:
-1. CMD: Local runs `start.sh` (auto-installs ComfyUI), Production runs `handler.py` directly
-2. ComfyUI location: Local filesystem vs RunPod network volume
+### Production Mode (`RUN_MODE=production`)
+- ComfyUI + Handler + Jupyter Lab
+- Full environment for RunPod Pods
+- Jupyter on port 8888 for live editing
+- Perfect for interactive GPU pods
+
+### Endpoint Mode (`RUN_MODE=endpoint`)
+- ComfyUI + Handler only (no Jupyter)
+- Optimized for fast cold starts
+- Minimal overhead for serverless
+- Perfect for RunPod Serverless Endpoints
+
+**All modes use the same architecture** - lightweight handler (~3GB) connects to ComfyUI over HTTP. The unified build eliminates the need for separate images!
 
 ## GPU Support
 

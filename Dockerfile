@@ -63,8 +63,9 @@ RUN wget -O /tmp/comfyui-requirements.txt \
 
 # Install additional dependencies (xformers, performance optimizations)
 # Note: Skip xformers to avoid PyTorch version conflicts - ComfyUI will use built-in attention
-RUN echo "Installing transformers and accelerate..." && \
-    pip3 install --no-cache-dir transformers accelerate
+# Note: transformers and huggingface-hub versions are managed by ComfyUI's requirements.txt
+RUN echo "Installing accelerate..." && \
+    pip3 install --no-cache-dir accelerate
 
 # Install Triton for Linux (already built-in for CUDA-enabled PyTorch on Linux)
 # Note: triton-windows is Windows-only, Linux uses triton from PyTorch
@@ -89,6 +90,7 @@ RUN pip3 install --no-cache-dir -r requirements.txt
 COPY handler.py .
 COPY s3_upload.py .
 COPY start.sh .
+COPY entrypoint.sh .
 COPY download_models.py .
 COPY install_nodes.py .
 COPY test_input.json .
@@ -98,11 +100,12 @@ COPY apply_config.sh .
 COPY config.yml .
 COPY CONFIG_MANAGEMENT.md .
 
-RUN chmod +x /app/start.sh /app/download_models.py /app/install_nodes.py /app/apply_config.sh
+RUN chmod +x /app/start.sh /app/entrypoint.sh /app/download_models.py /app/install_nodes.py /app/apply_config.sh
 
 # Environment variables
 ENV COMFY_API_URL=http://127.0.0.1:8188
 ENV COMFYUI_PATH=/comfyui
+ENV RUN_MODE=production
 
 # Enable hf_transfer for faster HuggingFace downloads (optional but recommended)
 ENV HF_HUB_ENABLE_HF_TRANSFER=1
@@ -119,14 +122,5 @@ LABEL description="ComfyUI + RunPod Handler - Universal GPU Support"
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
     CMD curl -f http://localhost:8188/ || exit 1
 
-# Default: Local development mode (auto-install ComfyUI + start handler)
-CMD ["/app/start.sh"]
-
-# =============================================================================
-# Production target - Handler only (for RunPod serverless)
-# =============================================================================
-
-FROM final AS production
-
-# Override CMD to run handler only (expects ComfyUI on RunPod volume)
-CMD ["python3", "handler.py"]
+# Unified entrypoint (uses RUN_MODE env to decide what to run)
+ENTRYPOINT ["/app/entrypoint.sh"]

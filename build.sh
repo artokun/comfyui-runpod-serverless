@@ -90,11 +90,10 @@ echo -e "Push:         ${YELLOW}${PUSH}${NC}"
 echo -e "GPU Support:  ${YELLOW}All modern NVIDIA GPUs (RTX 4090+, RTX 5090+)${NC}"
 echo -e "${GREEN}==============================================================${NC}\n"
 
-# Build the image (using production target for RunPod deployment)
+# Build the unified image (works for both local and RunPod via RUN_MODE env)
 echo -e "${GREEN}Building Docker image...${NC}"
 docker build \
     --platform linux/amd64 \
-    --target production \
     ${NO_CACHE} \
     -f ${DOCKERFILE} \
     -t ${IMAGE_TAG} \
