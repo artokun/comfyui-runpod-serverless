@@ -381,6 +381,21 @@ if [ "$SKIP_INSTALL" = false ]; then
     fi
 fi
 
+# Always check for orphaned node dependencies (even when SHA matches)
+# This ensures nodes collected over time have their dependencies installed
+if [ -f "/app/install_nodes.py" ] && [ -d "$COMFYUI_PATH/custom_nodes" ]; then
+    echo "Checking for orphaned node dependencies..."
+    echo "(Nodes in custom_nodes but not in config.yml)"
+    echo ""
+
+    python3 /app/install_nodes.py \
+        --orphans-only \
+        --comfyui-dir "$COMFYUI_PATH" \
+        || echo "⚠ Some orphaned node dependencies failed to install"
+
+    echo ""
+fi
+
 # Check GPU availability
 echo "Checking GPU..."
 if python3 -c "import torch; assert torch.cuda.is_available(), 'GPU not available'"; then

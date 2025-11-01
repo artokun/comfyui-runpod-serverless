@@ -581,6 +581,11 @@ def main():
         default=4,
         help="Number of parallel workers for installation (default: 4)"
     )
+    parser.add_argument(
+        "--orphans-only",
+        action="store_true",
+        help="Only install dependencies for orphaned nodes (nodes in custom_nodes but not in config.yml)"
+    )
 
     args = parser.parse_args()
 
@@ -590,6 +595,32 @@ def main():
     except (subprocess.CalledProcessError, FileNotFoundError):
         print("Error: git is not installed or not in PATH")
         return 1
+
+    # Check ComfyUI directory exists
+    if not args.comfyui_dir.exists():
+        print(f"\nError: ComfyUI directory not found: {args.comfyui_dir}")
+        print("Run this script after ComfyUI has been installed")
+        return 1
+
+    # Handle orphans-only mode
+    if args.orphans_only:
+        print(f"\n{'='*70}")
+        print(f"  Orphaned Nodes Dependency Installation")
+        print(f"{'='*70}")
+        print(f"  ComfyUI: {args.comfyui_dir}")
+        print(f"{'='*70}\n")
+
+        installer = NodeInstaller(
+            args.comfyui_dir,
+            force=args.force,
+            skip_deps=args.skip_deps,
+            verbose=args.verbose
+        )
+
+        # Install dependencies for ALL nodes (pass empty list so all are considered orphaned)
+        orphan_results = installer.install_orphan_dependencies([])
+
+        return 1 if orphan_results.get("deps_failed", 0) > 0 else 0
 
     # Parse the config file
     print(f"Parsing config file: {args.config}")
@@ -653,12 +684,6 @@ def main():
             print(f"    URL: {entry.url}")
         print()
         return 0
-
-    # Check ComfyUI directory exists
-    if not args.comfyui_dir.exists():
-        print(f"\nError: ComfyUI directory not found: {args.comfyui_dir}")
-        print("Run this script after ComfyUI has been installed")
-        return 1
 
     # Install nodes
     installer = NodeInstaller(
