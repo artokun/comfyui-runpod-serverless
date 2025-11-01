@@ -6,9 +6,3 @@ pyyaml>=6.0.3
 tqdm>=4.67.1
 jupyter>=1.1.1
 jupyterlab>=4.4.10
-gitpython>=3.1.0
-pygithub
-matrix-nio
-toml
-uv
-chardet
