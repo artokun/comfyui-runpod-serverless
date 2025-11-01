@@ -15,12 +15,68 @@ if [ -d "/runpod-volume" ]; then
     ENVIRONMENT="runpod"
     MODELS_PATH="/runpod-volume"
     COMFYUI_PATH="/runpod-volume/ComfyUI"
+    PYTHON_PACKAGES_DIR="/runpod-volume/python-packages"
 else
     echo "✓ Running in local environment"
     ENVIRONMENT="local"
     MODELS_PATH="${MODELS_PATH:-/comfyui/models}"
     COMFYUI_PATH="${COMFYUI_PATH:-/comfyui}"
+    # Use workspace parent for Python packages (persists across rebuilds)
+    PYTHON_PACKAGES_DIR="/workspace/python-packages"
 fi
+
+# ============================================================
+# Python Package Persistence (Volume-based caching)
+# ============================================================
+#
+# Store Python site-packages on volume to avoid reinstalling
+# dependencies on every container rebuild. Massive time saver!
+#
+# Flow:
+# 1. First run: Copy container's packages to volume
+# 2. Set pip to install to volume directory
+# 3. Prepend volume packages to PYTHONPATH
+# 4. Subsequent runs: Packages persist, no reinstall needed!
+
+CONTAINER_SITE_PACKAGES="/usr/local/lib/python3.10/dist-packages"
+
+# Create volume package directory if it doesn't exist
+mkdir -p "$PYTHON_PACKAGES_DIR"
+
+# On first run, initialize from container's base packages
+if [ ! -f "$PYTHON_PACKAGES_DIR/.initialized" ]; then
+    echo ""
+    echo "=================================================="
+    echo "  First Run: Initializing Python Package Cache"
+    echo "=================================================="
+    echo ""
+    echo "Copying base packages to volume for persistence..."
+    echo "  Source: $CONTAINER_SITE_PACKAGES"
+    echo "  Target: $PYTHON_PACKAGES_DIR"
+    echo ""
+
+    # Copy container's packages to volume (preserving symlinks)
+    cp -a "$CONTAINER_SITE_PACKAGES/." "$PYTHON_PACKAGES_DIR/" 2>/dev/null || true
+
+    # Mark as initialized
+    touch "$PYTHON_PACKAGES_DIR/.initialized"
+    echo "✓ Package cache initialized"
+    echo "  Future pip installs will persist across container rebuilds!"
+    echo "=================================================="
+    echo ""
+else
+    echo "✓ Using persistent Python package cache: $PYTHON_PACKAGES_DIR"
+fi
+
+# Configure pip to install to volume directory
+export PIP_TARGET="$PYTHON_PACKAGES_DIR"
+
+# Prepend volume packages to PYTHONPATH (takes precedence over container packages)
+export PYTHONPATH="$PYTHON_PACKAGES_DIR:${PYTHONPATH:-}"
+
+echo "  Python package persistence enabled"
+echo "  - Packages install to: $PYTHON_PACKAGES_DIR"
+echo "  - Persist across container rebuilds: YES"
 
 # Check if ComfyUI exists, if not clone it
 if [ ! -f "$COMFYUI_PATH/main.py" ]; then
