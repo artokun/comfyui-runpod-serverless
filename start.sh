@@ -107,11 +107,12 @@ if [ ! -f "$PYTHON_PACKAGES_DIR/.core-deps-installed" ]; then
     # Install triton
     uv pip install --system --no-cache triton || echo "Triton skipped (may be bundled)"
 
-    # Install SageAttention (performance optimization)
-    uv pip install --system --no-cache \
-        https://github.com/thu-ml/SageAttention/releases/download/v2.2.0/sageattention-2.2.0-py3-none-any.whl \
-        || uv pip install --system --no-cache "git+https://github.com/thu-ml/SageAttention.git@v2.2.0" \
-        || echo "SageAttention skipped (optional)"
+    # Install SageAttention (performance optimization with pre-built wheels)
+    # Note: Version 1.0.6 has pre-built wheels, no compilation needed
+    # Newer versions (2.x) require CUDA compiler which adds 343MB to container
+    uv pip install --system --no-cache --no-build-isolation sageattention==1.0.6 \
+        && echo "✓ SageAttention installed successfully" \
+        || echo "⚠ SageAttention skipped (optional performance optimization)"
 
     # Install hf_transfer for faster downloads
     uv pip install --system --no-cache hf_transfer

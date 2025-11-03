@@ -27,14 +27,23 @@ Press `Ctrl+C` to stop.
 ## What You Get
 
 ✅ **Lightning-fast package installation** - uv package manager (10-100x faster than pip)
+
 ✅ **Volume-first architecture** - Minimal 8.7GB container, everything persists on volume
+
 ✅ **Universal GPU support** - PyTorch 2.9.0 + CUDA 12.8 (RTX 4090, RTX 5090, future GPUs)
+
 ✅ **Blazing downloads** - hf_transfer for HuggingFace (100-200+ MB/s), parallel chunks for others
+
 ✅ **ComfyUI auto-installs** on first run (updateable, persistent)
+
 ✅ **Full web interface** for workflow design
+
 ✅ **Jupyter Lab** for config editing and file management
+
 ✅ **RunPod-compatible API** handler
+
 ✅ **SHA-based config caching** - Skip reinstalls when config unchanged
+
 ✅ **Works everywhere** - Mac, Linux, Windows
 
 ## Table of Contents
